@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, Link, useNavigate } from "react-router-dom";
+import FirePlanner from "./pages/fireplanner";
 
 const USERS_KEY = "amm_users";
 const SESSION_KEY = "amm_session";
@@ -643,6 +644,7 @@ function AuthLayout({ children }) {
 }
 
 function LoginPage({ onLogin }) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -656,6 +658,7 @@ function LoginPage({ onLogin }) {
     }
     setSession(user);
     onLogin(user);
+    navigate("/", { replace: true });
   };
 
   return (
@@ -1977,6 +1980,14 @@ export default function App() {
         element={
           <ProtectedRoute sessionUser={sessionUser}>
             <DashboardApp user={sessionUser} onLogout={logout} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/fire-planner"
+        element={
+          <ProtectedRoute sessionUser={sessionUser}>
+            <FirePlanner />
           </ProtectedRoute>
         }
       />
