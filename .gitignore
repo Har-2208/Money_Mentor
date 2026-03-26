@@ -25,9 +25,12 @@ backend/.env.*
 *.sqlite3
 
 # Frontend
-Money_Mentor/node_modules/
-Money_Mentor/dist/
-Money_Mentor/.vite/
+node_modules/
+dist/
+.vite/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
 # OS/editor
 .DS_Store

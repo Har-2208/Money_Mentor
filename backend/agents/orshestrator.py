@@ -7,7 +7,7 @@ from backend.agents.explanation_agent import explain_response
 from backend.agents.portfolio_xray_crew import run_portfolio_xray_crew
 from backend.agents.tax_wizard_crew import run_tax_wizard_crew
 from backend.config import get_env_float
-from backend.db.fake_db import get_user_data
+from backend.db.user_repository import get_user_data
 from backend.tools.sip_calculator import calculate_sip
 
 

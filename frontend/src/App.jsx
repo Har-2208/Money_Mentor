@@ -1,51 +1,119 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, Link, useNavigate } from "react-router-dom";
 import FirePlanner from "./pages/fireplanner";
+import agentService from "./services/agentService";
 
 const USERS_KEY = "amm_users";
 const SESSION_KEY = "amm_session";
 
-const initialFinance = {
-  monthlyBudget: 45000,
-  balance: 128500,
-  spent: 27850,
-  income: 97500, // Monthly income
-  expenses: 27850, // Monthly expenses
-  goal: {
-    name: "Emergency Fund",
-    target: 200000,
-    saved: 105000,
-  },
-  assets: {
-    savings: 128500,
-    investments: 250000,
-    realEstate: 0,
-    otherAssets: 50000,
-  },
-  liabilities: {
-    homeLoan: 0,
-    personalLoan: 0,
-    creditCard: 15000,
-  },
-  insurance: {
-    health: true,
-    life: true,
-    coverage: 500000,
-  },
-  emergencyFund: 105000,
-  emergencyFundTarget: 200000,
-  debt: 15000,
-  taxSavings: 0,
-  retirement: 250000,
-  transactions: [
-    { desc: "Salary", category: "Income", amount: 85000 },
-    { desc: "Rent", category: "Bills", amount: -18000 },
-    { desc: "Groceries", category: "Food", amount: -4200 },
-    { desc: "Metro recharge", category: "Transport", amount: -1500 },
-    { desc: "Freelance payout", category: "Income", amount: 12500 },
-    { desc: "Pharmacy", category: "Health", amount: -1900 },
-  ],
-};
+function toNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function createEmptyFinance() {
+  return {
+    monthlyBudget: 0,
+    balance: 0,
+    spent: 0,
+    income: 0,
+    expenses: 0,
+    goal: {
+      name: "Primary Goal",
+      target: 0,
+      saved: 0,
+    },
+    assets: {
+      savings: 0,
+      investments: 0,
+      realEstate: 0,
+      otherAssets: 0,
+    },
+    liabilities: {
+      homeLoan: 0,
+      personalLoan: 0,
+      creditCard: 0,
+    },
+    insurance: {
+      health: false,
+      life: false,
+      coverage: 0,
+    },
+    emergencyFund: 0,
+    emergencyFundTarget: 0,
+    debt: 0,
+    taxSavings: 0,
+    retirement: 0,
+    transactions: [],
+  };
+}
+
+function buildFinanceFromProfile(profile) {
+  if (!profile) return createEmptyFinance();
+
+  const monthlyIncome =
+    (toNumber(profile.income.baseSalary) +
+      toNumber(profile.income.hra) +
+      toNumber(profile.income.otherAllowances) +
+      toNumber(profile.income.otherIncome)) /
+    12;
+
+  const monthlyExpenses =
+    toNumber(profile.expenses.rent) +
+    toNumber(profile.expenses.food) +
+    toNumber(profile.expenses.travel) +
+    toNumber(profile.expenses.subscriptions) +
+    toNumber(profile.expenses.misc);
+
+  const savings = toNumber(profile.assets.cash) + toNumber(profile.assets.fd);
+  const investments =
+    toNumber(profile.assets.mutualFunds) +
+    toNumber(profile.assets.ppf) +
+    toNumber(profile.assets.stocks);
+
+  const debt =
+    toNumber(profile.liabilities.homeLoan) +
+    toNumber(profile.liabilities.emi) +
+    toNumber(profile.liabilities.creditCardDues);
+
+  const primaryGoal = profile.goals?.[0] || { type: "Primary Goal", targetAmount: 0 };
+  const targetGoalAmount = toNumber(primaryGoal.targetAmount);
+
+  return {
+    monthlyBudget: monthlyExpenses,
+    balance: Math.max(savings, 0),
+    spent: monthlyExpenses,
+    income: Math.max(monthlyIncome, 0),
+    expenses: Math.max(monthlyExpenses, 0),
+    goal: {
+      name: primaryGoal.type || "Primary Goal",
+      target: targetGoalAmount,
+      saved: Math.max(0, Math.min(savings, targetGoalAmount || savings)),
+    },
+    assets: {
+      savings,
+      investments,
+      realEstate: 0,
+      otherAssets: 0,
+    },
+    liabilities: {
+      homeLoan: toNumber(profile.liabilities.homeLoan),
+      personalLoan: toNumber(profile.liabilities.emi),
+      creditCard: toNumber(profile.liabilities.creditCardDues),
+    },
+    insurance: {
+      health: toNumber(profile.insurance.healthInsurance) > 0,
+      life: toNumber(profile.insurance.lifeInsurance) > 0,
+      coverage: toNumber(profile.insurance.healthInsurance) + toNumber(profile.insurance.lifeInsurance),
+    },
+    emergencyFund: savings,
+    emergencyFundTarget: monthlyExpenses * 6,
+    debt,
+    taxSavings: 0,
+    retirement: investments,
+    transactions: [],
+  };
+}
 
 function formatINR(value) {
   return `INR ${Math.round(value).toLocaleString("en-IN")}`;
@@ -83,15 +151,6 @@ function setSession(user) {
 
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
-}
-
-function ensureSeedUser() {
-  const users = getUsers();
-  const exists = users.some((u) => u.email.toLowerCase() === "demo@moneymentor.app");
-  if (!exists) {
-    users.push({ name: "Demo User", email: "demo@moneymentor.app", password: "mentor123" });
-    saveUsers(users);
-  }
 }
 
 function isValidEmail(email) {
@@ -768,27 +827,92 @@ function SignupPage({ onSignup }) {
 
 function DashboardApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState("dashboard");
-  const [finance, setFinance] = useState(initialFinance);
+  const [profileData, setProfileData] = useState(getOnboarding(user.email) || initialOnboarding);
+  const [finance, setFinance] = useState(() => buildFinanceFromProfile(getOnboarding(user.email) || initialOnboarding));
   const [chatInput, setChatInput] = useState("");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [currentProfileSection, setCurrentProfileSection] = useState(0);
-  const [profileData, setProfileData] = useState(getOnboarding(user.email) || initialOnboarding);
-  const [chatMessages, setChatMessages] = useState([
-    {
-      role: "ai",
-      answer: "I am actively tracking your spending and goal path.",
-      reasoning: "Your current state combines transaction flow, budget consumption, and goal progress in one decision model.",
-      impact: "Ask any spending question and I will respond with decision-first guidance.",
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatPending, setChatPending] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const [agentInsights, setAgentInsights] = useState({
+    tax: null,
+    fire: null,
+    lifeEvent: null,
+    couple: null,
+  });
+  const [insightsLoading, setInsightsLoading] = useState(false);
   const [notification, setNotification] = useState({ type: "good", text: "You are within healthy budget range." });
   const [txnForm, setTxnForm] = useState({ type: "Debit", desc: "", amount: "" });
+  const userId = 1;
 
   useEffect(() => {
     if (showProfileModal) {
       setCurrentProfileSection(getFirstIncompleteProfileSection(profileData));
     }
   }, [showProfileModal]);
+
+  useEffect(() => {
+    setFinance((prev) => ({
+      ...buildFinanceFromProfile(profileData),
+      transactions: prev.transactions,
+    }));
+  }, [profileData]);
+
+  useEffect(() => {
+    const fetchWelcome = async () => {
+      try {
+        const result = await agentService.askAI("Give a short summary of how you can help me right now.", userId);
+        setChatMessages([
+          {
+            role: "ai",
+            answer: result?.explanation || "Your AI mentor is ready.",
+            reasoning: `Intent detected: ${result?.intent || "general"}`,
+            impact: "Ask a question to get personalized financial guidance from backend agents.",
+          },
+        ]);
+      } catch {
+        setChatMessages([
+          {
+            role: "ai",
+            answer: "Your AI mentor is ready.",
+            reasoning: "Backend is reachable but no startup summary was returned.",
+            impact: "Ask a question to begin.",
+          },
+        ]);
+      }
+    };
+
+    fetchWelcome();
+  }, [userId]);
+
+  useEffect(() => {
+    const loadInsights = async () => {
+      setInsightsLoading(true);
+      try {
+        const salary = toNumber(profileData.income.baseSalary) + toNumber(profileData.income.otherIncome) * 12;
+        const deductions = {
+          "80C": Math.max(0, toNumber(profileData.assets.ppf)),
+          "80D": Math.max(0, toNumber(profileData.insurance.healthInsurance)),
+        };
+
+        const [tax, fire, lifeEvent, couple] = await Promise.all([
+          agentService.getTaxAnalysis(userId, salary || null, deductions),
+          agentService.getFirePlan(userId, toNumber(profileData.goals?.[0]?.years) ? toNumber(profileData.personalInfo.age) + toNumber(profileData.goals[0].years) : null),
+          agentService.getLifeEventPlan(userId, "Annual financial planning review"),
+          agentService.getCouplePlan(userId),
+        ]);
+
+        setAgentInsights({ tax, fire, lifeEvent, couple });
+      } catch {
+        setAgentInsights({ tax: null, fire: null, lifeEvent: null, couple: null });
+      } finally {
+        setInsightsLoading(false);
+      }
+    };
+
+    loadInsights();
+  }, [profileData, userId]);
 
   // Calculate profile completion percentage
   const profileCompletion = useMemo(() => {
@@ -895,9 +1019,9 @@ function DashboardApp({ user, onLogout }) {
   // Monthly Cash Flow
   const cashFlow = useMemo(() => {
     return {
-      income: finance.income || 97500,
-      expenses: finance.spent || 27850,
-      surplus: (finance.income || 97500) - (finance.spent || 27850),
+      income: finance.income || 0,
+      expenses: finance.spent || 0,
+      surplus: (finance.income || 0) - (finance.spent || 0),
     };
   }, [finance]);
 
@@ -946,11 +1070,11 @@ function DashboardApp({ user, onLogout }) {
   }, [finance, profileData]);
 
   const budgetUsage = useMemo(
-    () => Math.max(0, Math.min(100, (finance.spent / finance.monthlyBudget) * 100)),
+    () => (finance.monthlyBudget > 0 ? Math.max(0, Math.min(100, (finance.spent / finance.monthlyBudget) * 100)) : 0),
     [finance.spent, finance.monthlyBudget]
   );
   const goalProgress = useMemo(
-    () => Math.max(0, Math.min(100, (finance.goal.saved / finance.goal.target) * 100)),
+    () => (finance.goal.target > 0 ? Math.max(0, Math.min(100, (finance.goal.saved / finance.goal.target) * 100)) : 0),
     [finance.goal.saved, finance.goal.target]
   );
 
@@ -981,36 +1105,34 @@ function DashboardApp({ user, onLogout }) {
   const appendAI = (payload) => setChatMessages((prev) => [...prev, { role: "ai", ...payload }]);
   const appendUser = (text) => setChatMessages((prev) => [...prev, { role: "user", text }]);
 
-  const respond = (input) => {
-    const text = input.toLowerCase();
-    if (text.includes("can i spend") || text.includes("spend")) {
-      const amountMatch = text.match(/(\d{2,7})/);
-      const askAmount = amountMatch ? Number(amountMatch[1]) : 0;
-      const decision = askAmount <= budgetLeft * 0.6;
-      return {
-        answer: decision ? `Yes, spending ${formatINR(askAmount)} is reasonable right now.` : `Not recommended right now for ${formatINR(askAmount)}.`,
-        reasoning:
-          askAmount > 0
-            ? `You have ${formatINR(Math.max(0, budgetLeft))} left in budget and ${formatINR(finance.balance)} in balance.`
-            : "I need an amount to evaluate against your budget and goal velocity.",
-        impact: decision
-          ? `After spending, your estimated budget headroom stays near ${formatINR(Math.max(0, budgetLeft - askAmount))}.`
-          : `After spending, budget headroom drops to ${formatINR(Math.max(0, budgetLeft - askAmount))}, increasing overshoot risk.`,
-      };
+  const sendChatQuery = async (query) => {
+    setChatError("");
+    setChatPending(true);
+    try {
+      const result = await agentService.askAI(query, userId);
+      appendAI({
+        answer: result?.explanation || "No AI response was returned.",
+        reasoning: `Intent detected: ${result?.intent || "general"}`,
+        impact: "This answer is generated by backend agents and may include compliance notes.",
+      });
+    } catch (error) {
+      setChatError(error?.message || "Failed to reach backend AI endpoint.");
+      appendAI({
+        answer: "I could not process that request right now.",
+        reasoning: "Backend request failed.",
+        impact: "Please retry after checking backend server status.",
+      });
+    } finally {
+      setChatPending(false);
     }
-    return {
-      answer: "Here is the decision summary from your current financial context.",
-      reasoning: `Budget usage is ${budgetUsage.toFixed(1)}% and goal status is ${goalStatus}.`,
-      impact: "Follow smart suggestions to convert this into immediate actions.",
-    };
   };
 
-  const submitChat = (event) => {
+  const submitChat = async (event) => {
     event.preventDefault();
     const value = chatInput.trim();
     if (!value) return;
     appendUser(value);
-    appendAI(respond(value));
+    await sendChatQuery(value);
     setChatInput("");
   };
 
@@ -1067,9 +1189,9 @@ function DashboardApp({ user, onLogout }) {
   };
 
   const quickPrompts = [
-    "Can I spend INR 5000 on a short trip?",
-    "How do I save faster this month?",
-    "Where am I overspending right now?",
+    "Help me optimize tax for this year",
+    "Generate a FIRE strategy from my current profile",
+    "What should I prioritize this month: debt, emergency fund, or investing?",
   ];
 
   const topCategory = categoryTotals[0]?.[0] || "Spending";
@@ -1083,8 +1205,8 @@ function DashboardApp({ user, onLogout }) {
 
       <header className="topbar glass">
         <div>
-          <p className="eyebrow">Conversational Financial Dashboard</p>
           <h1>AI Money Mentor</h1>
+          <p className="eyebrow">Conversational Financial Dashboard</p>
         </div>
         <div className="topbar-right">
           <div className="context-strip">
@@ -1136,7 +1258,7 @@ function DashboardApp({ user, onLogout }) {
           {["dashboard", "chat", "insights", "goals", "transactions"].map((screen) => (
             <button
               key={screen}
-              className={`nav-btn ${activeScreen === screen ? "active" : ""}`}
+              className={`nav-btn ${screen === "chat" ? "ai-nav-btn" : ""} ${activeScreen === screen ? "active" : ""}`}
               onClick={() => setActiveScreen(screen)}
             >
               {screen === "chat" ? "AI Mentor" : screen.charAt(0).toUpperCase() + screen.slice(1)}
@@ -1181,112 +1303,6 @@ function DashboardApp({ user, onLogout }) {
                   </div>
                 </div>
               )}
-
-              {/* Profile Details Grid */}
-              {profileCompletion > 0 && (
-                <div className="profile-details-grid">
-                  {profileData.personalInfo.age && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">Age</span>
-                      <span className="detail-value">{profileData.personalInfo.age}</span>
-                    </div>
-                  )}
-                  {profileData.personalInfo.city && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">City</span>
-                      <span className="detail-value">{profileData.personalInfo.city}</span>
-                    </div>
-                  )}
-                  {profileData.personalInfo.maritalStatus && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">Marital Status</span>
-                      <span className="detail-value">{profileData.personalInfo.maritalStatus}</span>
-                    </div>
-                  )}
-                  {profileData.personalInfo.dependents && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">Dependents</span>
-                      <span className="detail-value">{profileData.personalInfo.dependents}</span>
-                    </div>
-                  )}
-                  {profileData.income.baseSalary && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">Base Salary</span>
-                      <span className="detail-value">{formatINR(profileData.income.baseSalary)}</span>
-                    </div>
-                  )}
-                  {profileData.income.hra && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">HRA</span>
-                      <span className="detail-value">{formatINR(profileData.income.hra)}</span>
-                    </div>
-                  )}
-                  {profileData.expenses.rent && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">Monthly Rent</span>
-                      <span className="detail-value">{formatINR(profileData.expenses.rent)}</span>
-                    </div>
-                  )}
-                  {profileData.riskProfile && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">Risk Profile</span>
-                      <span className="detail-value">{profileData.riskProfile}</span>
-                    </div>
-                  )}
-                  {profileData.assets.mutualFunds && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">Mutual Funds</span>
-                      <span className="detail-value">{formatINR(profileData.assets.mutualFunds)}</span>
-                    </div>
-                  )}
-                  {profileData.liabilities.homeLoan && (
-                    <div className="profile-detail-item">
-                      <span className="detail-label">Home Loan</span>
-                      <span className="detail-value">{formatINR(profileData.liabilities.homeLoan)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="visual-snapshot-grid">
-                <article className="card visual-card">
-                  <p className="card-label">Budget Pulse</p>
-                  <svg viewBox="0 0 220 120" className="mini-diagram">
-                    <path d="M10 96 C40 80, 60 50, 92 58 C122 66, 150 20, 210 34" fill="none" stroke="#007a78" strokeWidth="6" strokeLinecap="round"/>
-                    <circle cx="210" cy="34" r="6" fill="#007a78"/>
-                    <text x="10" y="114" className="chart-muted">Usage {budgetUsage.toFixed(0)}%</text>
-                  </svg>
-                </article>
-
-                <article className="card visual-card">
-                  <p className="card-label">Goal Rocket</p>
-                  <div className="pictogram-line">
-                    <span className="glyph">🚀</span>
-                    <div className="meter goal"><div className="meter-fill" style={{ width: `${goalProgress}%` }}></div></div>
-                    <strong>{goalProgress.toFixed(0)}%</strong>
-                  </div>
-                </article>
-
-                <article className="card visual-card">
-                  <p className="card-label">Cash River</p>
-                  <svg viewBox="0 0 220 120" className="mini-diagram">
-                    <rect x="20" y="18" width="48" height="84" rx="12" fill="rgba(15,118,110,0.25)"/>
-                    <rect x="86" y="40" width="48" height="62" rx="12" fill="rgba(220,38,38,0.2)"/>
-                    <rect x="152" y="56" width="48" height="46" rx="12" fill="rgba(0,122,120,0.35)"/>
-                    <text x="44" y="112" textAnchor="middle" className="chart-muted">In</text>
-                    <text x="110" y="112" textAnchor="middle" className="chart-muted">Out</text>
-                    <text x="176" y="112" textAnchor="middle" className="chart-muted">Left</text>
-                  </svg>
-                </article>
-
-                <article className="card visual-card">
-                  <p className="card-label">Risk Compass</p>
-                  <div className="pictogram-line">
-                    <span className="glyph">🧭</span>
-                    <span className="risk-pill">{profileData.riskProfile || "Pending"}</span>
-                  </div>
-                </article>
-              </div>
 
               {/* ALERTS SECTION */}
               {alerts.length > 0 && (
@@ -1406,7 +1422,7 @@ function DashboardApp({ user, onLogout }) {
               </div>
 
               {/* CASH FLOW & EXISTING CARDS */}
-              <div className="grid three-up roomy-row">
+              <div className="grid two-up roomy-row">
                 <article className="card">
                   <p className="card-label">💰 Monthly Cash Flow</p>
                   <div className="cashflow-visual">
@@ -1430,7 +1446,7 @@ function DashboardApp({ user, onLogout }) {
                     </div>
                   </div>
                   <div className="cf-percentage">
-                    <p><strong>Savings Rate:</strong> {((cashFlow.surplus / cashFlow.income) * 100).toFixed(1)}%</p>
+                    <p><strong>Savings Rate:</strong> {cashFlow.income > 0 ? ((cashFlow.surplus / cashFlow.income) * 100).toFixed(1) : "0.0"}%</p>
                   </div>
                 </article>
 
@@ -1448,47 +1464,12 @@ function DashboardApp({ user, onLogout }) {
                     <span className="tag">{topCategory} highest category</span>
                   </div>
                 </article>
-                <article className="card">
-                  <p className="card-label">Current Balance</p>
-                  <h3>{formatINR(finance.balance)}</h3>
-                  <p>{finance.balance > 100000 ? "Strong liquidity position this week." : "Liquidity is narrowing."}</p>
-                </article>
               </div>
 
-              <div className="grid three-up">
-                <article className="card">
-                  <p className="card-label">Spending Breakdown</p>
-                  <div className="stack">
-                    {categoryTotals.slice(0, 4).map(([cat, amount]) => (
-                      <div key={cat} className="row breakdown-visual-row">
-                        <span className="breakdown-name">{cat}</span>
-                        <div className="breakdown-bar-wrap">
-                          <div
-                            className="breakdown-bar"
-                            style={{ width: `${Math.min(100, (amount / Math.max(1, categoryTotals[0]?.[1] || 1)) * 100)}%` }}
-                          ></div>
-                        </div>
-                        <strong>{formatINR(amount)}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-                <article className="card">
-                  <p className="card-label">Budget Usage</p>
-                  <div className="meter"><div className="meter-fill" style={{ width: `${budgetUsage}%` }}></div></div>
-                  <p>{budgetUsage.toFixed(1)}% used this month</p>
-                </article>
-                <article className="card">
-                  <p className="card-label">Goal Progress</p>
-                  <div className="meter goal"><div className="meter-fill" style={{ width: `${goalProgress}%` }}></div></div>
-                  <p>{goalProgress.toFixed(1)}% funded</p>
-                </article>
-              </div>
-
-              <div className="grid two-up chart-grid">
-                <article className="card">
+              <div className="grid chart-grid">
+                <article className="card category-split-card">
                   <p className="card-label">Category Split</p>
-                  <svg className="chart-svg" viewBox="0 0 320 230">
+                  <svg className="chart-svg category-split-svg" viewBox="0 0 320 230">
                     {donutTotal > 0 ? (
                       <>
                         {(() => {
@@ -1533,27 +1514,6 @@ function DashboardApp({ user, onLogout }) {
                     )}
                   </svg>
                 </article>
-
-                <article className="card">
-                  <p className="card-label">Momentum</p>
-                  <svg className="chart-svg" viewBox="0 0 320 230">
-                    {[budgetUsage, goalProgress, Math.min(100, (finance.balance / 200000) * 100)].map((v, i) => {
-                      const colors = ["#007a78", "#e76f36", "#2f4858"];
-                      const labels = ["Budget", "Goal", "Buffer"];
-                      const h = (v / 100) * 120;
-                      const x = 44 + i * 90;
-                      const y = 182 - h;
-                      return (
-                        <g key={labels[i]}>
-                          <rect x={x} y={y} width="56" height={h} rx="10" fill={colors[i]} opacity="0.9" />
-                          <text x={x + 28} y={y - 8} textAnchor="middle" className="chart-caption">{v.toFixed(0)}%</text>
-                          <text x={x + 28} y="202" textAnchor="middle" className="chart-muted">{labels[i]}</text>
-                        </g>
-                      );
-                    })}
-                    <line x1="24" y1="182" x2="296" y2="182" stroke="rgba(16,34,45,0.18)" />
-                  </svg>
-                </article>
               </div>
             </section>
           )}
@@ -1578,28 +1538,32 @@ function DashboardApp({ user, onLogout }) {
                     ))}
                   </div>
                   <form className="chat-form" onSubmit={submitChat}>
-                    <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} required />
-                    <button type="submit">Send</button>
+                    <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} required disabled={chatPending} />
+                    <button type="submit" disabled={chatPending}>{chatPending ? "Sending..." : "Send"}</button>
                   </form>
-
-                  <div className="chat-suggestions-inline">
-                    {quickPrompts.map((prompt) => (
-                      <button
-                        key={prompt}
-                        type="button"
-                        className="pill-btn"
-                        onClick={() => {
-                          appendUser(prompt);
-                          appendAI(respond(prompt));
-                        }}
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
+                  {chatError && <p className="auth-message">{chatError}</p>}
                 </article>
 
-                <div className="grid mentor-bottom-row">
+                <div className="grid two-up mentor-bottom-row">
+                  <aside className="card">
+                    <p className="card-label">Smart Suggestions</p>
+                    <div className="stack">
+                      {quickPrompts.map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          className="pill-btn"
+                          onClick={async () => {
+                            appendUser(prompt);
+                            await sendChatQuery(prompt);
+                          }}
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </aside>
+
                   <aside className="card">
                     <p className="card-label">Live Decision Snapshot</p>
                     <div className="snapshot">
@@ -1628,17 +1592,46 @@ function DashboardApp({ user, onLogout }) {
                   </div>
                 </article>
                 <article className="card">
-                  <p className="card-label">Autonomous Recommendations</p>
+                  <p className="card-label">Agent Recommendations</p>
                   <div className="stack">
-                    {[
-                      budgetUsage > 80 ? "Cap discretionary spending at INR 700 per day for next 7 days." : null,
-                      budgetLeft > 10000 ? "Move INR 4000 into Emergency Fund now while cashflow is positive." : null,
-                      "Schedule weekly spending review every Sunday evening with AI mentor.",
-                    ]
-                      .filter(Boolean)
-                      .map((text) => (
-                        <div key={text} className="txn-item"><strong>Action</strong><br /><small>{text}</small></div>
-                      ))}
+                    {insightsLoading && (
+                      <div className="txn-item"><strong>Loading</strong><br /><small>Fetching latest recommendations from backend agents...</small></div>
+                    )}
+                    {!insightsLoading && agentInsights.tax?.tax_analysis && (
+                      <div className="txn-item">
+                        <strong>Tax Wizard</strong><br />
+                        <small>
+                          Best regime: {agentInsights.tax.tax_analysis.best_option}. Missing deductions: {(agentInsights.tax.tax_analysis.missing_deductions || []).join(", ") || "none"}.
+                        </small>
+                      </div>
+                    )}
+                    {!insightsLoading && agentInsights.fire?.fire_plan && (
+                      <div className="txn-item">
+                        <strong>FIRE Planner</strong><br />
+                        <small>
+                          Monthly SIP target: {formatINR(agentInsights.fire.fire_plan.monthly_sip)}. Years to retire: {agentInsights.fire.fire_plan.timeline?.years_to_retire ?? "-"}.
+                        </small>
+                      </div>
+                    )}
+                    {!insightsLoading && agentInsights.lifeEvent?.life_event_plan && (
+                      <div className="txn-item">
+                        <strong>Life Event Planner</strong><br />
+                        <small>
+                          {agentInsights.lifeEvent.life_event_plan.suggestions?.[0] || "Life event strategy is available."}
+                        </small>
+                      </div>
+                    )}
+                    {!insightsLoading && agentInsights.couple?.couple_plan && (
+                      <div className="txn-item">
+                        <strong>Couple Planner</strong><br />
+                        <small>
+                          Combined income estimate: {formatINR(agentInsights.couple.couple_plan.combined_income)}.
+                        </small>
+                      </div>
+                    )}
+                    {!insightsLoading && !agentInsights.tax && !agentInsights.fire && !agentInsights.lifeEvent && !agentInsights.couple && (
+                      <div className="txn-item"><strong>No Data</strong><br /><small>Unable to fetch endpoint-driven insights at the moment.</small></div>
+                    )}
                   </div>
                 </article>
               </div>
@@ -1950,7 +1943,6 @@ export default function App() {
   const [sessionUser, setSessionUser] = useState(null);
 
   useEffect(() => {
-    ensureSeedUser();
     const session = getSession();
     if (session) {
       const user = getUsers().find((u) => u.email.toLowerCase() === session.email.toLowerCase());

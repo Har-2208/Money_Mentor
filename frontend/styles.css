@@ -88,6 +88,16 @@ p {
   animation: rise 0.5s ease;
 }
 
+.topbar h1 {
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.05;
+  background: linear-gradient(110deg, #006f6d 0%, #0ea5a2 45%, #e76f36 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 8px 20px rgba(0, 122, 120, 0.22);
+}
+
 .topbar-right {
   display: flex;
   align-items: center;
@@ -101,7 +111,7 @@ p {
   text-transform: uppercase;
   letter-spacing: 1.3px;
   font-size: 12px;
-  margin-bottom: 4px;
+  margin-top: 6px;
 }
 
 .context-strip {
@@ -188,6 +198,23 @@ p {
   transform: translateX(3px);
 }
 
+.nav-btn.ai-nav-btn {
+  position: relative;
+}
+
+.nav-btn.ai-nav-btn::before {
+  content: "✦";
+  margin-right: 8px;
+  color: #0ea5a2;
+}
+
+.nav-btn.ai-nav-btn.active {
+  background: linear-gradient(90deg, rgba(0, 122, 120, 0.28), rgba(16, 185, 129, 0.2));
+  border: 1px solid rgba(0, 122, 120, 0.35);
+  box-shadow: 0 10px 22px rgba(0, 122, 120, 0.22);
+  color: #0f2f33;
+}
+
 .content-column {
   display: flex;
   flex-direction: column;
@@ -251,6 +278,16 @@ p {
   margin-top: 14px;
 }
 
+.category-split-card {
+  max-width: 560px;
+  padding: 14px;
+  gap: 10px;
+}
+
+.category-split-svg {
+  min-height: 170px;
+}
+
 .roomy-row {
   margin-top: 6px;
 }
@@ -294,8 +331,8 @@ p {
 
 .visual-snapshot-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
 }
 
 .visual-card {
@@ -303,9 +340,15 @@ p {
   justify-content: space-between;
 }
 
+.compact-visual-card {
+  min-height: 96px;
+  padding: 10px 12px;
+  gap: 6px;
+}
+
 .mini-diagram {
   width: 100%;
-  min-height: 108px;
+  min-height: 54px;
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(0, 122, 120, 0.08), rgba(255, 255, 255, 0.7));
 }
@@ -335,7 +378,6 @@ p {
   transform: translateY(-2px);
   box-shadow: 0 24px 46px rgba(14, 39, 48, 0.16);
 }
-
 .highlight-card {
   background:
     linear-gradient(125deg, rgba(0, 122, 120, 0.16), rgba(255, 255, 255, 0.75) 45%),
