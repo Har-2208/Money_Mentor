@@ -9,20 +9,20 @@ const apiClient = axios.create({
   },
 });
 
-async function generateFirePlan(formData) {
+async function generatePlan(formData) {
   try {
-    const response = await apiClient.post("/api/fire-plan", formData);
+    const response = await apiClient.post("/api/couple-plan", formData);
     return response.data;
   } catch (error) {
     const message =
       error?.response?.data?.detail ||
       error?.response?.data?.message ||
       error?.message ||
-      "Failed to generate FIRE plan.";
+      "Failed to generate couple plan.";
     throw new Error(message);
   }
 }
 
 export default {
-  generateFirePlan,
+  generatePlan,
 };

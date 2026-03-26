@@ -9,20 +9,20 @@ const apiClient = axios.create({
   },
 });
 
-async function generateFirePlan(formData) {
+async function calculateTax(formData) {
   try {
-    const response = await apiClient.post("/api/fire-plan", formData);
+    const response = await apiClient.post("/api/tax-calculate", formData);
     return response.data;
   } catch (error) {
     const message =
       error?.response?.data?.detail ||
       error?.response?.data?.message ||
       error?.message ||
-      "Failed to generate FIRE plan.";
+      "Failed to calculate tax.";
     throw new Error(message);
   }
 }
 
 export default {
-  generateFirePlan,
+  calculateTax,
 };

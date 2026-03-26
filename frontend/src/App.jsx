@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, Link, useNavigate } from "react-router-dom";
 import FirePlanner from "./pages/fireplanner";
+import TaxPlanner from "./pages/TaxPlanner";
+import PortfolioAnalyzer from "./pages/PortfolioAnalyzer";
+import LifeEventPlanner from "./pages/LifeEventPlanner";
+import CouplePlanner from "./pages/CouplePlanner";
 import agentService from "./services/agentService";
 
 const USERS_KEY = "amm_users";
@@ -76,7 +80,10 @@ function buildFinanceFromProfile(profile) {
     toNumber(profile.liabilities.emi) +
     toNumber(profile.liabilities.creditCardDues);
 
-  const primaryGoal = profile.goals?.[0] || { type: "Primary Goal", targetAmount: 0 };
+  const primaryGoal = profile.goals?.[0] || {
+    type: "Primary Goal",
+    targetAmount: 0,
+  };
   const targetGoalAmount = toNumber(primaryGoal.targetAmount);
 
   return {
@@ -104,7 +111,9 @@ function buildFinanceFromProfile(profile) {
     insurance: {
       health: toNumber(profile.insurance.healthInsurance) > 0,
       life: toNumber(profile.insurance.lifeInsurance) > 0,
-      coverage: toNumber(profile.insurance.healthInsurance) + toNumber(profile.insurance.lifeInsurance),
+      coverage:
+        toNumber(profile.insurance.healthInsurance) +
+        toNumber(profile.insurance.lifeInsurance),
     },
     emergencyFund: savings,
     emergencyFundTarget: monthlyExpenses * 6,
@@ -146,7 +155,10 @@ function getSession() {
 }
 
 function setSession(user) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ name: user.name, email: user.email }));
+  localStorage.setItem(
+    SESSION_KEY,
+    JSON.stringify({ name: user.name, email: user.email }),
+  );
 }
 
 function clearSession() {
@@ -242,12 +254,44 @@ const initialOnboarding = {
 };
 
 function getFirstIncompleteProfileSection(data) {
-  if (!data.personalInfo.age || !data.personalInfo.city || !data.personalInfo.maritalStatus || data.personalInfo.dependents === "") return 0;
-  if (!data.income.baseSalary || !data.income.hra || !data.income.otherAllowances || !data.income.otherIncome) return 1;
-  if (!data.expenses.rent || !data.expenses.food || !data.expenses.travel || !data.expenses.subscriptions || !data.expenses.misc) return 2;
-  if (!data.assets.mutualFunds || !data.assets.ppf || !data.assets.stocks || !data.assets.fd || !data.assets.cash) return 3;
-  if (!data.liabilities.homeLoan || !data.liabilities.emi || !data.liabilities.creditCardDues) return 4;
-  if (!data.insurance.healthInsurance || !data.insurance.lifeInsurance) return 5;
+  if (
+    !data.personalInfo.age ||
+    !data.personalInfo.city ||
+    !data.personalInfo.maritalStatus ||
+    data.personalInfo.dependents === ""
+  )
+    return 0;
+  if (
+    !data.income.baseSalary ||
+    !data.income.hra ||
+    !data.income.otherAllowances ||
+    !data.income.otherIncome
+  )
+    return 1;
+  if (
+    !data.expenses.rent ||
+    !data.expenses.food ||
+    !data.expenses.travel ||
+    !data.expenses.subscriptions ||
+    !data.expenses.misc
+  )
+    return 2;
+  if (
+    !data.assets.mutualFunds ||
+    !data.assets.ppf ||
+    !data.assets.stocks ||
+    !data.assets.fd ||
+    !data.assets.cash
+  )
+    return 3;
+  if (
+    !data.liabilities.homeLoan ||
+    !data.liabilities.emi ||
+    !data.liabilities.creditCardDues
+  )
+    return 4;
+  if (!data.insurance.healthInsurance || !data.insurance.lifeInsurance)
+    return 5;
   if (data.goals.some((goal) => !goal.targetAmount || !goal.years)) return 6;
   if (!data.riskProfile) return 7;
   return 7;
@@ -256,7 +300,9 @@ function getFirstIncompleteProfileSection(data) {
 function OnboardingPage({ user, onComplete }) {
   const navigate = useNavigate();
   const [currentSection, setCurrentSection] = useState(0);
-  const [data, setData] = useState(getOnboarding(user.email) || initialOnboarding);
+  const [data, setData] = useState(
+    getOnboarding(user.email) || initialOnboarding,
+  );
   const [skipWarning, setSkipWarning] = useState(false);
 
   const sections = [
@@ -324,7 +370,9 @@ function OnboardingPage({ user, onComplete }) {
             <div className="progress-bar">
               <div
                 className="progress-fill"
-                style={{ width: `${((currentSection + 1) / sections.length) * 100}%` }}
+                style={{
+                  width: `${((currentSection + 1) / sections.length) * 100}%`,
+                }}
               ></div>
             </div>
             <p className="progress-text">
@@ -336,12 +384,17 @@ function OnboardingPage({ user, onComplete }) {
           {skipWarning && (
             <div className="warning-box">
               <strong>Skip onboarding?</strong>
-              <p>You can always complete this later from your profile settings.</p>
+              <p>
+                You can always complete this later from your profile settings.
+              </p>
               <div className="button-group">
                 <button onClick={handleComplete} className="btn-primary">
                   Yes, Go to Dashboard
                 </button>
-                <button onClick={() => setSkipWarning(false)} className="btn-secondary">
+                <button
+                  onClick={() => setSkipWarning(false)}
+                  className="btn-secondary"
+                >
                   Cancel
                 </button>
               </div>
@@ -361,7 +414,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.personalInfo.age}
-                        onChange={(e) => updateField("personalInfo.age", e.target.value)}
+                        onChange={(e) =>
+                          updateField("personalInfo.age", e.target.value)
+                        }
                         min="18"
                         max="120"
                       />
@@ -371,14 +426,21 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="text"
                         value={data.personalInfo.city}
-                        onChange={(e) => updateField("personalInfo.city", e.target.value)}
+                        onChange={(e) =>
+                          updateField("personalInfo.city", e.target.value)
+                        }
                       />
                     </label>
                     <label>
                       Marital Status
                       <select
                         value={data.personalInfo.maritalStatus}
-                        onChange={(e) => updateField("personalInfo.maritalStatus", e.target.value)}
+                        onChange={(e) =>
+                          updateField(
+                            "personalInfo.maritalStatus",
+                            e.target.value,
+                          )
+                        }
                       >
                         <option value="">Select...</option>
                         <option value="Single">Single</option>
@@ -391,7 +453,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.personalInfo.dependents}
-                        onChange={(e) => updateField("personalInfo.dependents", e.target.value)}
+                        onChange={(e) =>
+                          updateField("personalInfo.dependents", e.target.value)
+                        }
                         min="0"
                       />
                     </label>
@@ -406,7 +470,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.income.baseSalary}
-                        onChange={(e) => updateField("income.baseSalary", e.target.value)}
+                        onChange={(e) =>
+                          updateField("income.baseSalary", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -414,7 +480,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.income.hra}
-                        onChange={(e) => updateField("income.hra", e.target.value)}
+                        onChange={(e) =>
+                          updateField("income.hra", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -422,7 +490,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.income.otherAllowances}
-                        onChange={(e) => updateField("income.otherAllowances", e.target.value)}
+                        onChange={(e) =>
+                          updateField("income.otherAllowances", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -430,7 +500,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.income.bonus}
-                        onChange={(e) => updateField("income.bonus", e.target.value)}
+                        onChange={(e) =>
+                          updateField("income.bonus", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -438,7 +510,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.income.otherIncome}
-                        onChange={(e) => updateField("income.otherIncome", e.target.value)}
+                        onChange={(e) =>
+                          updateField("income.otherIncome", e.target.value)
+                        }
                       />
                     </label>
                   </div>
@@ -453,7 +527,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.expenses.rent}
-                        onChange={(e) => updateField("expenses.rent", e.target.value)}
+                        onChange={(e) =>
+                          updateField("expenses.rent", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -461,7 +537,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.expenses.food}
-                        onChange={(e) => updateField("expenses.food", e.target.value)}
+                        onChange={(e) =>
+                          updateField("expenses.food", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -469,7 +547,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.expenses.travel}
-                        onChange={(e) => updateField("expenses.travel", e.target.value)}
+                        onChange={(e) =>
+                          updateField("expenses.travel", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -477,7 +557,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.expenses.subscriptions}
-                        onChange={(e) => updateField("expenses.subscriptions", e.target.value)}
+                        onChange={(e) =>
+                          updateField("expenses.subscriptions", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -485,7 +567,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.expenses.misc}
-                        onChange={(e) => updateField("expenses.misc", e.target.value)}
+                        onChange={(e) =>
+                          updateField("expenses.misc", e.target.value)
+                        }
                       />
                     </label>
                   </div>
@@ -499,7 +583,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.assets.mutualFunds}
-                        onChange={(e) => updateField("assets.mutualFunds", e.target.value)}
+                        onChange={(e) =>
+                          updateField("assets.mutualFunds", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -507,7 +593,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.assets.ppf}
-                        onChange={(e) => updateField("assets.ppf", e.target.value)}
+                        onChange={(e) =>
+                          updateField("assets.ppf", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -515,7 +603,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.assets.stocks}
-                        onChange={(e) => updateField("assets.stocks", e.target.value)}
+                        onChange={(e) =>
+                          updateField("assets.stocks", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -523,7 +613,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.assets.fd}
-                        onChange={(e) => updateField("assets.fd", e.target.value)}
+                        onChange={(e) =>
+                          updateField("assets.fd", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -531,7 +623,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.assets.cash}
-                        onChange={(e) => updateField("assets.cash", e.target.value)}
+                        onChange={(e) =>
+                          updateField("assets.cash", e.target.value)
+                        }
                       />
                     </label>
                   </div>
@@ -545,7 +639,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.liabilities.homeLoan}
-                        onChange={(e) => updateField("liabilities.homeLoan", e.target.value)}
+                        onChange={(e) =>
+                          updateField("liabilities.homeLoan", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -553,7 +649,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.liabilities.emi}
-                        onChange={(e) => updateField("liabilities.emi", e.target.value)}
+                        onChange={(e) =>
+                          updateField("liabilities.emi", e.target.value)
+                        }
                       />
                     </label>
                     <label>
@@ -561,7 +659,12 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.liabilities.creditCardDues}
-                        onChange={(e) => updateField("liabilities.creditCardDues", e.target.value)}
+                        onChange={(e) =>
+                          updateField(
+                            "liabilities.creditCardDues",
+                            e.target.value,
+                          )
+                        }
                       />
                     </label>
                   </div>
@@ -575,7 +678,12 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.insurance.healthInsurance}
-                        onChange={(e) => updateField("insurance.healthInsurance", e.target.value)}
+                        onChange={(e) =>
+                          updateField(
+                            "insurance.healthInsurance",
+                            e.target.value,
+                          )
+                        }
                       />
                     </label>
                     <label>
@@ -583,7 +691,9 @@ function OnboardingPage({ user, onComplete }) {
                       <input
                         type="number"
                         value={data.insurance.lifeInsurance}
-                        onChange={(e) => updateField("insurance.lifeInsurance", e.target.value)}
+                        onChange={(e) =>
+                          updateField("insurance.lifeInsurance", e.target.value)
+                        }
                       />
                     </label>
                   </div>
@@ -600,7 +710,14 @@ function OnboardingPage({ user, onComplete }) {
                           <input
                             type="number"
                             value={goal.targetAmount}
-                            onChange={(e) => updateArrayField("goals", idx, "targetAmount", e.target.value)}
+                            onChange={(e) =>
+                              updateArrayField(
+                                "goals",
+                                idx,
+                                "targetAmount",
+                                e.target.value,
+                              )
+                            }
                           />
                         </label>
                         <label>
@@ -608,7 +725,14 @@ function OnboardingPage({ user, onComplete }) {
                           <input
                             type="number"
                             value={goal.years}
-                            onChange={(e) => updateArrayField("goals", idx, "years", e.target.value)}
+                            onChange={(e) =>
+                              updateArrayField(
+                                "goals",
+                                idx,
+                                "years",
+                                e.target.value,
+                              )
+                            }
                           />
                         </label>
                       </div>
@@ -619,14 +743,18 @@ function OnboardingPage({ user, onComplete }) {
                 {/* Section 8: Risk Profile */}
                 {currentSection === 7 && (
                   <div className="section-form">
-                    <p className="section-hint">How comfortable are you with investment risk?</p>
+                    <p className="section-hint">
+                      How comfortable are you with investment risk?
+                    </p>
                     <div className="radio-group">
                       <label>
                         <input
                           type="radio"
                           value="Conservative"
                           checked={data.riskProfile === "Conservative"}
-                          onChange={(e) => updateField("riskProfile", e.target.value)}
+                          onChange={(e) =>
+                            updateField("riskProfile", e.target.value)
+                          }
                         />
                         Conservative (Stable returns, low volatility)
                       </label>
@@ -635,7 +763,9 @@ function OnboardingPage({ user, onComplete }) {
                           type="radio"
                           value="Moderate"
                           checked={data.riskProfile === "Moderate"}
-                          onChange={(e) => updateField("riskProfile", e.target.value)}
+                          onChange={(e) =>
+                            updateField("riskProfile", e.target.value)
+                          }
                         />
                         Moderate (Balanced growth and stability)
                       </label>
@@ -644,7 +774,9 @@ function OnboardingPage({ user, onComplete }) {
                           type="radio"
                           value="Aggressive"
                           checked={data.riskProfile === "Aggressive"}
-                          onChange={(e) => updateField("riskProfile", e.target.value)}
+                          onChange={(e) =>
+                            updateField("riskProfile", e.target.value)
+                          }
                         />
                         Aggressive (High growth potential, higher risk)
                       </label>
@@ -656,14 +788,16 @@ function OnboardingPage({ user, onComplete }) {
               {/* Action buttons */}
               <div className="onboarding-actions">
                 <div className="button-group-flex">
-                  <button 
-                    className="btn-prev-section" 
-                    onClick={() => setCurrentSection(Math.max(0, currentSection - 1))}
+                  <button
+                    className="btn-prev-section"
+                    onClick={() =>
+                      setCurrentSection(Math.max(0, currentSection - 1))
+                    }
                     disabled={currentSection === 0}
                   >
                     ← Previous
                   </button>
-                  <button 
+                  <button
                     className="btn-fill-later"
                     onClick={() => {
                       saveOnboarding(user.email, data);
@@ -673,7 +807,9 @@ function OnboardingPage({ user, onComplete }) {
                     Fill Later
                   </button>
                   <button onClick={handleNext} className="btn-primary">
-                    {currentSection === sections.length - 1 ? "Complete Setup" : "Next Section →"}
+                    {currentSection === sections.length - 1
+                      ? "Complete Setup"
+                      : "Next Section →"}
                   </button>
                 </div>
               </div>
@@ -710,7 +846,9 @@ function LoginPage({ onLogin }) {
 
   const submit = (event) => {
     event.preventDefault();
-    const user = getUsers().find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    const user = getUsers().find(
+      (u) => u.email.toLowerCase() === email.trim().toLowerCase(),
+    );
     if (!user || user.password !== password) {
       setMessage("Invalid credentials. Try again.");
       return;
@@ -724,12 +862,20 @@ function LoginPage({ onLogin }) {
     <AuthLayout>
       <p className="card-label">Secure Access</p>
       <h2>Welcome to AI Money Mentor</h2>
-      <p className="auth-copy">Sign in to continue with your financial assistant, insights, and decision dashboards.</p>
+      <p className="auth-copy">
+        Sign in to continue with your financial assistant, insights, and
+        decision dashboards.
+      </p>
 
       <form className="auth-form" onSubmit={submit}>
         <label>
           Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </label>
         <label>
           Password
@@ -745,7 +891,10 @@ function LoginPage({ onLogin }) {
       </form>
 
       <p className="auth-switch">
-        Dont have an account ? <Link to="/signup" className="auth-link">Sign Up</Link>
+        Dont have an account ?{" "}
+        <Link to="/signup" className="auth-link">
+          Sign Up
+        </Link>
       </p>
       <p className="auth-message">{message}</p>
     </AuthLayout>
@@ -795,30 +944,58 @@ function SignupPage({ onSignup }) {
     <AuthLayout>
       <p className="card-label">Create Account</p>
       <h2>Sign Up for AI Money Mentor</h2>
-      <p className="auth-copy">Set up your account to unlock personalized AI guidance, insights, and planning tools.</p>
+      <p className="auth-copy">
+        Set up your account to unlock personalized AI guidance, insights, and
+        planning tools.
+      </p>
 
       <form className="auth-form" onSubmit={submit}>
         <label>
           Full Name
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
         </label>
         <label>
           Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </label>
         <label>
           Password
-          <input type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <input
+            type="password"
+            minLength={6}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
         </label>
         <label>
           Confirm Password
-          <input type="password" minLength={6} value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+          <input
+            type="password"
+            minLength={6}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+          />
         </label>
         <button type="submit">Create Account</button>
       </form>
 
       <p className="auth-switch">
-        Already have an account ? <Link to="/login" className="auth-link">Login</Link>
+        Already have an account ?{" "}
+        <Link to="/login" className="auth-link">
+          Login
+        </Link>
       </p>
       <p className="auth-message">{message}</p>
     </AuthLayout>
@@ -827,8 +1004,12 @@ function SignupPage({ onSignup }) {
 
 function DashboardApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState("dashboard");
-  const [profileData, setProfileData] = useState(getOnboarding(user.email) || initialOnboarding);
-  const [finance, setFinance] = useState(() => buildFinanceFromProfile(getOnboarding(user.email) || initialOnboarding));
+  const [profileData, setProfileData] = useState(
+    getOnboarding(user.email) || initialOnboarding,
+  );
+  const [finance, setFinance] = useState(() =>
+    buildFinanceFromProfile(getOnboarding(user.email) || initialOnboarding),
+  );
   const [chatInput, setChatInput] = useState("");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [currentProfileSection, setCurrentProfileSection] = useState(0);
@@ -842,8 +1023,15 @@ function DashboardApp({ user, onLogout }) {
     couple: null,
   });
   const [insightsLoading, setInsightsLoading] = useState(false);
-  const [notification, setNotification] = useState({ type: "good", text: "You are within healthy budget range." });
-  const [txnForm, setTxnForm] = useState({ type: "Debit", desc: "", amount: "" });
+  const [notification, setNotification] = useState({
+    type: "good",
+    text: "You are within healthy budget range.",
+  });
+  const [txnForm, setTxnForm] = useState({
+    type: "Debit",
+    desc: "",
+    amount: "",
+  });
   const userId = 1;
 
   useEffect(() => {
@@ -862,13 +1050,17 @@ function DashboardApp({ user, onLogout }) {
   useEffect(() => {
     const fetchWelcome = async () => {
       try {
-        const result = await agentService.askAI("Give a short summary of how you can help me right now.", userId);
+        const result = await agentService.askAI(
+          "Give a short summary of how you can help me right now.",
+          userId,
+        );
         setChatMessages([
           {
             role: "ai",
             answer: result?.explanation || "Your AI mentor is ready.",
             reasoning: `Intent detected: ${result?.intent || "general"}`,
-            impact: "Ask a question to get personalized financial guidance from backend agents.",
+            impact:
+              "Ask a question to get personalized financial guidance from backend agents.",
           },
         ]);
       } catch {
@@ -876,7 +1068,8 @@ function DashboardApp({ user, onLogout }) {
           {
             role: "ai",
             answer: "Your AI mentor is ready.",
-            reasoning: "Backend is reachable but no startup summary was returned.",
+            reasoning:
+              "Backend is reachable but no startup summary was returned.",
             impact: "Ask a question to begin.",
           },
         ]);
@@ -890,7 +1083,9 @@ function DashboardApp({ user, onLogout }) {
     const loadInsights = async () => {
       setInsightsLoading(true);
       try {
-        const salary = toNumber(profileData.income.baseSalary) + toNumber(profileData.income.otherIncome) * 12;
+        const salary =
+          toNumber(profileData.income.baseSalary) +
+          toNumber(profileData.income.otherIncome) * 12;
         const deductions = {
           "80C": Math.max(0, toNumber(profileData.assets.ppf)),
           "80D": Math.max(0, toNumber(profileData.insurance.healthInsurance)),
@@ -898,14 +1093,28 @@ function DashboardApp({ user, onLogout }) {
 
         const [tax, fire, lifeEvent, couple] = await Promise.all([
           agentService.getTaxAnalysis(userId, salary || null, deductions),
-          agentService.getFirePlan(userId, toNumber(profileData.goals?.[0]?.years) ? toNumber(profileData.personalInfo.age) + toNumber(profileData.goals[0].years) : null),
-          agentService.getLifeEventPlan(userId, "Annual financial planning review"),
+          agentService.getFirePlan(
+            userId,
+            toNumber(profileData.goals?.[0]?.years)
+              ? toNumber(profileData.personalInfo.age) +
+                  toNumber(profileData.goals[0].years)
+              : null,
+          ),
+          agentService.getLifeEventPlan(
+            userId,
+            "Annual financial planning review",
+          ),
           agentService.getCouplePlan(userId),
         ]);
 
         setAgentInsights({ tax, fire, lifeEvent, couple });
       } catch {
-        setAgentInsights({ tax: null, fire: null, lifeEvent: null, couple: null });
+        setAgentInsights({
+          tax: null,
+          fire: null,
+          lifeEvent: null,
+          couple: null,
+        });
       } finally {
         setInsightsLoading(false);
       }
@@ -980,17 +1189,31 @@ function DashboardApp({ user, onLogout }) {
     const scores = {};
 
     // Emergency Fund: 0-20 points
-    scores.emergencyFund = Math.min(20, (finance.emergencyFund / finance.emergencyFundTarget) * 20);
+    scores.emergencyFund = Math.min(
+      20,
+      (finance.emergencyFund / finance.emergencyFundTarget) * 20,
+    );
 
     // Insurance: 0-15 points
-    scores.insurance = finance.insurance.health && finance.insurance.life ? 15 : finance.insurance.health || finance.insurance.life ? 10 : 0;
+    scores.insurance =
+      finance.insurance.health && finance.insurance.life
+        ? 15
+        : finance.insurance.health || finance.insurance.life
+          ? 10
+          : 0;
 
     // Debt: 0-15 points (lower debt = higher score)
-    const totalDebt = finance.liabilities.homeLoan + finance.liabilities.personalLoan + finance.liabilities.creditCard;
+    const totalDebt =
+      finance.liabilities.homeLoan +
+      finance.liabilities.personalLoan +
+      finance.liabilities.creditCard;
     scores.debt = Math.max(0, 15 - (totalDebt / 500000) * 15);
 
     // Investment: 0-20 points
-    scores.investment = Math.min(20, (finance.assets.investments / 500000) * 20);
+    scores.investment = Math.min(
+      20,
+      (finance.assets.investments / 500000) * 20,
+    );
 
     // Tax Planning: 0-15 points
     scores.tax = finance.taxSavings > 0 ? 15 : 5;
@@ -1004,11 +1227,15 @@ function DashboardApp({ user, onLogout }) {
 
   // Net Worth Calculation
   const netWorth = useMemo(() => {
-    const totalAssets = (finance.assets.savings || 0) + (finance.assets.investments || 0) + 
-                        (finance.assets.realEstate || 0) + (finance.assets.otherAssets || 0);
-    const totalLiabilities = (finance.liabilities.homeLoan || 0) + 
-                            (finance.liabilities.personalLoan || 0) + 
-                            (finance.liabilities.creditCard || 0);
+    const totalAssets =
+      (finance.assets.savings || 0) +
+      (finance.assets.investments || 0) +
+      (finance.assets.realEstate || 0) +
+      (finance.assets.otherAssets || 0);
+    const totalLiabilities =
+      (finance.liabilities.homeLoan || 0) +
+      (finance.liabilities.personalLoan || 0) +
+      (finance.liabilities.creditCard || 0);
     return {
       assets: totalAssets,
       liabilities: totalLiabilities,
@@ -1042,7 +1269,8 @@ function DashboardApp({ user, onLogout }) {
     if (profileData.income.baseSalary > 0 && finance.taxSavings === 0) {
       alertList.push({
         type: "info",
-        message: "Tax saving opportunity detected! Invest in PPF or ELSS for 80C deduction.",
+        message:
+          "Tax saving opportunity detected! Invest in PPF or ELSS for 80C deduction.",
         action: "Learn more",
       });
     }
@@ -1057,7 +1285,10 @@ function DashboardApp({ user, onLogout }) {
     }
 
     // Debt alert
-    const totalDebt = finance.liabilities.homeLoan + finance.liabilities.personalLoan + finance.liabilities.creditCard;
+    const totalDebt =
+      finance.liabilities.homeLoan +
+      finance.liabilities.personalLoan +
+      finance.liabilities.creditCard;
     if (totalDebt > 0) {
       alertList.push({
         type: "warn",
@@ -1070,21 +1301,39 @@ function DashboardApp({ user, onLogout }) {
   }, [finance, profileData]);
 
   const budgetUsage = useMemo(
-    () => (finance.monthlyBudget > 0 ? Math.max(0, Math.min(100, (finance.spent / finance.monthlyBudget) * 100)) : 0),
-    [finance.spent, finance.monthlyBudget]
+    () =>
+      finance.monthlyBudget > 0
+        ? Math.max(
+            0,
+            Math.min(100, (finance.spent / finance.monthlyBudget) * 100),
+          )
+        : 0,
+    [finance.spent, finance.monthlyBudget],
   );
   const goalProgress = useMemo(
-    () => (finance.goal.target > 0 ? Math.max(0, Math.min(100, (finance.goal.saved / finance.goal.target) * 100)) : 0),
-    [finance.goal.saved, finance.goal.target]
+    () =>
+      finance.goal.target > 0
+        ? Math.max(
+            0,
+            Math.min(100, (finance.goal.saved / finance.goal.target) * 100),
+          )
+        : 0,
+    [finance.goal.saved, finance.goal.target],
   );
 
-  const goalStatus = goalProgress >= 80 ? "Ahead" : goalProgress >= 55 ? "On Track" : "Needs Push";
+  const goalStatus =
+    goalProgress >= 80
+      ? "Ahead"
+      : goalProgress >= 55
+        ? "On Track"
+        : "Needs Push";
 
   const categoryTotals = useMemo(() => {
     const totals = {};
     finance.transactions.forEach((txn) => {
       if (txn.amount < 0) {
-        totals[txn.category] = (totals[txn.category] || 0) + Math.abs(txn.amount);
+        totals[txn.category] =
+          (totals[txn.category] || 0) + Math.abs(txn.amount);
       }
     });
     return Object.entries(totals).sort((a, b) => b[1] - a[1]);
@@ -1094,16 +1343,27 @@ function DashboardApp({ user, onLogout }) {
 
   useEffect(() => {
     if (budgetUsage >= 90) {
-      setNotification({ type: "warn", text: `Alert: You have used ${budgetUsage.toFixed(1)}% of your monthly budget.` });
+      setNotification({
+        type: "warn",
+        text: `Alert: You have used ${budgetUsage.toFixed(1)}% of your monthly budget.`,
+      });
     } else if (budgetUsage >= 75) {
-      setNotification({ type: "warn", text: `Heads up: Budget usage is at ${budgetUsage.toFixed(1)}%. Consider limiting variable spends.` });
+      setNotification({
+        type: "warn",
+        text: `Heads up: Budget usage is at ${budgetUsage.toFixed(1)}%. Consider limiting variable spends.`,
+      });
     } else {
-      setNotification({ type: "good", text: "You are within healthy budget range. AI will continue monitoring for opportunities." });
+      setNotification({
+        type: "good",
+        text: "You are within healthy budget range. AI will continue monitoring for opportunities.",
+      });
     }
   }, [budgetUsage]);
 
-  const appendAI = (payload) => setChatMessages((prev) => [...prev, { role: "ai", ...payload }]);
-  const appendUser = (text) => setChatMessages((prev) => [...prev, { role: "user", text }]);
+  const appendAI = (payload) =>
+    setChatMessages((prev) => [...prev, { role: "ai", ...payload }]);
+  const appendUser = (text) =>
+    setChatMessages((prev) => [...prev, { role: "user", text }]);
 
   const sendChatQuery = async (query) => {
     setChatError("");
@@ -1113,7 +1373,8 @@ function DashboardApp({ user, onLogout }) {
       appendAI({
         answer: result?.explanation || "No AI response was returned.",
         reasoning: `Intent detected: ${result?.intent || "general"}`,
-        impact: "This answer is generated by backend agents and may include compliance notes.",
+        impact:
+          "This answer is generated by backend agents and may include compliance notes.",
       });
     } catch (error) {
       setChatError(error?.message || "Failed to reach backend AI endpoint.");
@@ -1146,15 +1407,20 @@ function DashboardApp({ user, onLogout }) {
 
     setFinance((prev) => ({
       ...prev,
-      balance: signed >= 0 ? prev.balance + signed : prev.balance - Math.abs(signed),
+      balance:
+        signed >= 0 ? prev.balance + signed : prev.balance - Math.abs(signed),
       spent: signed < 0 ? prev.spent + Math.abs(signed) : prev.spent,
-      transactions: [...prev.transactions, { desc: txnForm.desc.trim(), category: autoCategory, amount: signed }],
+      transactions: [
+        ...prev.transactions,
+        { desc: txnForm.desc.trim(), category: autoCategory, amount: signed },
+      ],
     }));
 
     appendAI({
       answer: `${txnForm.desc.trim()} recorded successfully.`,
       reasoning: `${txnForm.type} transaction changed your budget and balance context in real time.`,
-      impact: "Future AI recommendations are now updated with this transaction.",
+      impact:
+        "Future AI recommendations are now updated with this transaction.",
     });
 
     setTxnForm({ type: "Debit", desc: "", amount: "" });
@@ -1210,64 +1476,167 @@ function DashboardApp({ user, onLogout }) {
         </div>
         <div className="topbar-right">
           <div className="context-strip">
-            <div className="context-item"><span>Balance</span><strong>{formatINR(finance.balance)}</strong></div>
-            <div className="context-item"><span>Budget Used</span><strong>{budgetUsage.toFixed(1)}%</strong></div>
-            <div className="context-item"><span>Goal Status</span><strong>{goalStatus}</strong></div>
+            <div className="context-item">
+              <span>Balance</span>
+              <strong>{formatINR(finance.balance)}</strong>
+            </div>
+            <div className="context-item">
+              <span>Budget Used</span>
+              <strong>{budgetUsage.toFixed(1)}%</strong>
+            </div>
+            <div className="context-item">
+              <span>Goal Status</span>
+              <strong>{goalStatus}</strong>
+            </div>
           </div>
           <div className="user-controls">
             <span className="user-welcome">Hi, {user.name.split(" ")[0]}</span>
-            <button 
-              type="button" 
-              className="profile-pie-btn" 
+            <button
+              type="button"
+              className="profile-pie-btn"
               onClick={() => setShowProfileModal(true)}
-              title={profileCompletion === 100 ? "Account" : `Profile ${profileCompletion}% complete`}
+              title={
+                profileCompletion === 100
+                  ? "Account"
+                  : `Profile ${profileCompletion}% complete`
+              }
             >
               {profileCompletion < 100 ? (
                 <svg viewBox="0 0 100 100" className="profile-chart">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(16, 34, 45, 0.1)" strokeWidth="8" />
-                  <circle 
-                    cx="50" 
-                    cy="50" 
-                    r="40" 
-                    fill="none" 
-                    stroke="#007a78" 
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke="rgba(16, 34, 45, 0.1)"
+                    strokeWidth="8"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke="#007a78"
                     strokeWidth="8"
                     strokeDasharray={`${(profileCompletion / 100) * 251.3} 251.3`}
                     strokeDashoffset="0"
                     transform="rotate(-90 50 50)"
                     strokeLinecap="round"
                   />
-                  <text x="50" y="58" fontSize="24" fontWeight="700" textAnchor="middle" fill="#007a78">
+                  <text
+                    x="50"
+                    y="58"
+                    fontSize="24"
+                    fontWeight="700"
+                    textAnchor="middle"
+                    fill="#007a78"
+                  >
                     {profileCompletion}%
                   </text>
                 </svg>
               ) : (
-                <svg viewBox="0 0 100 100" className="account-logo-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 100 100"
+                  className="account-logo-icon"
+                  aria-hidden="true"
+                >
                   <circle cx="50" cy="34" r="14" fill="#007a78" opacity="0.9" />
-                  <path d="M24 78c0-12 10-22 26-22s26 10 26 22" fill="none" stroke="#007a78" strokeWidth="8" strokeLinecap="round" />
+                  <path
+                    d="M24 78c0-12 10-22 26-22s26 10 26 22"
+                    fill="none"
+                    stroke="#007a78"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                  />
                 </svg>
               )}
             </button>
-            <button type="button" className="ghost-btn" onClick={onLogout}>Logout</button>
+            <button type="button" className="ghost-btn" onClick={onLogout}>
+              Logout
+            </button>
           </div>
         </div>
       </header>
 
       <main className="app-shell">
         <nav className="side-nav glass" aria-label="Primary">
-          {["dashboard", "chat", "insights", "goals", "transactions"].map((screen) => (
-            <button
-              key={screen}
-              className={`nav-btn ${screen === "chat" ? "ai-nav-btn" : ""} ${activeScreen === screen ? "active" : ""}`}
-              onClick={() => setActiveScreen(screen)}
-            >
-              {screen === "chat" ? "AI Mentor" : screen.charAt(0).toUpperCase() + screen.slice(1)}
-            </button>
-          ))}
+          {["dashboard", "chat", "insights", "goals", "transactions"].map(
+            (screen) => (
+              <button
+                key={screen}
+                className={`nav-btn ${screen === "chat" ? "ai-nav-btn" : ""} ${activeScreen === screen ? "active" : ""}`}
+                onClick={() => setActiveScreen(screen)}
+              >
+                {screen === "chat"
+                  ? "AI Mentor"
+                  : screen.charAt(0).toUpperCase() + screen.slice(1)}
+              </button>
+            ),
+          )}
+          <Link to="/fire-planner" className="nav-btn">
+            FIRE Planner
+          </Link>
+          <Link to="/tax-planner" className="nav-btn">
+            Tax Wizard
+          </Link>
+          <Link to="/portfolio-analyzer" className="nav-btn">
+            Portfolio X-Ray
+          </Link>
+          <Link to="/life-event" className="nav-btn">
+            Life Event Advisor
+          </Link>
+          <Link to="/couple-planner" className="nav-btn">
+            Couple Planner
+          </Link>
         </nav>
 
         <section className="content-column">
-          <div className={`notification ${notification.type}`}>{notification.text}</div>
+          <div className={`notification ${notification.type}`}>
+            {notification.text}
+          </div>
+
+          <div className="quick-actions">
+            <div className="card quick-action-card">
+              <div>
+                <p className="card-label">Save My Taxes</p>
+                <h3>💰 Tax Wizard</h3>
+                <p>Compare regimes and find missed deductions.</p>
+              </div>
+              <Link to="/tax-planner" className="tax-cta-button">
+                Open Tax Planner →
+              </Link>
+            </div>
+            <div className="card quick-action-card">
+              <div>
+                <p className="card-label">Analyze My Portfolio</p>
+                <h3>📈 Portfolio X-Ray</h3>
+                <p>Check XIRR, overlap, and expense drag fast.</p>
+              </div>
+              <Link to="/portfolio-analyzer" className="tax-cta-button">
+                Open Analyzer →
+              </Link>
+            </div>
+            <div className="card quick-action-card">
+              <div>
+                <p className="card-label">Life Event Advisor</p>
+                <h3>👶 Life Event Advisor</h3>
+                <p>Get personalized next steps for big moments.</p>
+              </div>
+              <Link to="/life-event" className="tax-cta-button">
+                Open Advisor →
+              </Link>
+            </div>
+            <div className="card quick-action-card">
+              <div>
+                <p className="card-label">Plan as a Couple</p>
+                <h3>❤️ Couple Planner</h3>
+                <p>Combine income, goals, and strategies together.</p>
+              </div>
+              <Link to="/couple-planner" className="tax-cta-button">
+                Open Planner →
+              </Link>
+            </div>
+          </div>
 
           {activeScreen === "dashboard" && (
             <section className="screen active-screen dashboard-flow">
@@ -1276,27 +1645,48 @@ function DashboardApp({ user, onLogout }) {
                 <div className="profile-summary-card">
                   <div className="profile-summary-left">
                     <h3>Complete Your Financial Profile</h3>
-                    <p>We have <strong>{profileCompletion}%</strong> of your information. This helps us provide better personalized recommendations.</p>
-                    <button className="btn-profile-cta" onClick={() => setShowProfileModal(true)}>
+                    <p>
+                      We have <strong>{profileCompletion}%</strong> of your
+                      information. This helps us provide better personalized
+                      recommendations.
+                    </p>
+                    <button
+                      className="btn-profile-cta"
+                      onClick={() => setShowProfileModal(true)}
+                    >
                       Continue Profile →
                     </button>
                   </div>
                   <div className="profile-summary-chart">
                     <svg viewBox="0 0 120 120" className="summary-chart-svg">
-                      <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(16, 34, 45, 0.1)" strokeWidth="10" />
-                      <circle 
-                        cx="60" 
-                        cy="60" 
-                        r="50" 
-                        fill="none" 
-                        stroke="#007a78" 
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="50"
+                        fill="none"
+                        stroke="rgba(16, 34, 45, 0.1)"
+                        strokeWidth="10"
+                      />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="50"
+                        fill="none"
+                        stroke="#007a78"
                         strokeWidth="10"
                         strokeDasharray={`${(profileCompletion / 100) * 314.15} 314.15`}
                         strokeDashoffset="0"
                         transform="rotate(-90 60 60)"
                         strokeLinecap="round"
                       />
-                      <text x="60" y="70" fontSize="32" fontWeight="700" textAnchor="middle" fill="#007a78">
+                      <text
+                        x="60"
+                        y="70"
+                        fontSize="32"
+                        fontWeight="700"
+                        textAnchor="middle"
+                        fill="#007a78"
+                      >
                         {profileCompletion}%
                       </text>
                     </svg>
@@ -1310,16 +1700,43 @@ function DashboardApp({ user, onLogout }) {
                   <p className="section-title">⚡ Smart Alerts</p>
                   <div className="alerts-grid">
                     {alerts.map((alert, idx) => (
-                      <div key={idx} className={`alert-card alert-${alert.type}`}>
+                      <div
+                        key={idx}
+                        className={`alert-card alert-${alert.type}`}
+                      >
                         <div className="alert-content">
                           <p className="alert-message">{alert.message}</p>
-                          <button className="alert-action">{alert.action}</button>
+                          <button className="alert-action">
+                            {alert.action}
+                          </button>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+
+              <div className="grid two-up">
+                <article className="card highlight-card tax-cta-card">
+                  <p className="card-label">Save My Taxes</p>
+                  <h3>💰 Tax Wizard</h3>
+                  <p>
+                    Compare old vs new regime and uncover deductions you might
+                    be missing.
+                  </p>
+                  <Link to="/tax-planner" className="tax-cta-button">
+                    Open Tax Planner →
+                  </Link>
+                </article>
+                <article className="card">
+                  <p className="card-label">Quick Insight</p>
+                  <h3>Tax readiness score</h3>
+                  <p>
+                    Use the wizard to see potential savings and optimize your
+                    deductions faster.
+                  </p>
+                </article>
+              </div>
 
               {/* MONEY HEALTH SCORE */}
               <div className="grid two-up">
@@ -1328,57 +1745,130 @@ function DashboardApp({ user, onLogout }) {
                   <div className="health-score-main">
                     <div className="score-circle">
                       <svg viewBox="0 0 120 120" className="score-svg">
-                        <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(16, 34, 45, 0.1)" strokeWidth="8" />
-                        <circle 
-                          cx="60" 
-                          cy="60" 
-                          r="50" 
-                          fill="none" 
-                          stroke={moneyHealthScore.total >= 75 ? "#0f766e" : moneyHealthScore.total >= 50 ? "#f59e0b" : "#dc2626"}
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="50"
+                          fill="none"
+                          stroke="rgba(16, 34, 45, 0.1)"
+                          strokeWidth="8"
+                        />
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="50"
+                          fill="none"
+                          stroke={
+                            moneyHealthScore.total >= 75
+                              ? "#0f766e"
+                              : moneyHealthScore.total >= 50
+                                ? "#f59e0b"
+                                : "#dc2626"
+                          }
                           strokeWidth="8"
                           strokeDasharray={`${(moneyHealthScore.total / 100) * 314.15} 314.15`}
                           strokeDashoffset="0"
                           transform="rotate(-90 60 60)"
                           strokeLinecap="round"
                         />
-                        <text x="60" y="70" fontSize="36" fontWeight="700" textAnchor="middle" fill={moneyHealthScore.total >= 75 ? "#0f766e" : moneyHealthScore.total >= 50 ? "#f59e0b" : "#dc2626"}>
+                        <text
+                          x="60"
+                          y="70"
+                          fontSize="36"
+                          fontWeight="700"
+                          textAnchor="middle"
+                          fill={
+                            moneyHealthScore.total >= 75
+                              ? "#0f766e"
+                              : moneyHealthScore.total >= 50
+                                ? "#f59e0b"
+                                : "#dc2626"
+                          }
+                        >
                           {moneyHealthScore.total}
                         </text>
                       </svg>
                       <p className="score-status">
-                        {moneyHealthScore.total >= 75 ? "Excellent" : moneyHealthScore.total >= 50 ? "Good" : "Needs Work"}
+                        {moneyHealthScore.total >= 75
+                          ? "Excellent"
+                          : moneyHealthScore.total >= 50
+                            ? "Good"
+                            : "Needs Work"}
                       </p>
                     </div>
                     <div className="health-breakdown">
                       <div className="health-item">
                         <span className="health-label">Emergency Fund</span>
-                        <div className="mini-bar" style={{ width: `${Math.min(100, moneyHealthScore.breakdown.emergencyFund * 5)}%` }}></div>
-                        <span className="health-value">{Math.round(moneyHealthScore.breakdown.emergencyFund)}%</span>
+                        <div
+                          className="mini-bar"
+                          style={{
+                            width: `${Math.min(100, moneyHealthScore.breakdown.emergencyFund * 5)}%`,
+                          }}
+                        ></div>
+                        <span className="health-value">
+                          {Math.round(moneyHealthScore.breakdown.emergencyFund)}
+                          %
+                        </span>
                       </div>
                       <div className="health-item">
                         <span className="health-label">Insurance</span>
-                        <div className="mini-bar" style={{ width: `${Math.min(100, moneyHealthScore.breakdown.insurance * 6.67)}%` }}></div>
-                        <span className="health-value">{Math.round(moneyHealthScore.breakdown.insurance)}%</span>
+                        <div
+                          className="mini-bar"
+                          style={{
+                            width: `${Math.min(100, moneyHealthScore.breakdown.insurance * 6.67)}%`,
+                          }}
+                        ></div>
+                        <span className="health-value">
+                          {Math.round(moneyHealthScore.breakdown.insurance)}%
+                        </span>
                       </div>
                       <div className="health-item">
                         <span className="health-label">Debt</span>
-                        <div className="mini-bar" style={{ width: `${Math.min(100, moneyHealthScore.breakdown.debt * 6.67)}%` }}></div>
-                        <span className="health-value">{Math.round(moneyHealthScore.breakdown.debt)}%</span>
+                        <div
+                          className="mini-bar"
+                          style={{
+                            width: `${Math.min(100, moneyHealthScore.breakdown.debt * 6.67)}%`,
+                          }}
+                        ></div>
+                        <span className="health-value">
+                          {Math.round(moneyHealthScore.breakdown.debt)}%
+                        </span>
                       </div>
                       <div className="health-item">
                         <span className="health-label">Investment</span>
-                        <div className="mini-bar" style={{ width: `${Math.min(100, moneyHealthScore.breakdown.investment * 5)}%` }}></div>
-                        <span className="health-value">{Math.round(moneyHealthScore.breakdown.investment)}%</span>
+                        <div
+                          className="mini-bar"
+                          style={{
+                            width: `${Math.min(100, moneyHealthScore.breakdown.investment * 5)}%`,
+                          }}
+                        ></div>
+                        <span className="health-value">
+                          {Math.round(moneyHealthScore.breakdown.investment)}%
+                        </span>
                       </div>
                       <div className="health-item">
                         <span className="health-label">Tax Planning</span>
-                        <div className="mini-bar" style={{ width: `${Math.min(100, moneyHealthScore.breakdown.tax * 6.67)}%` }}></div>
-                        <span className="health-value">{Math.round(moneyHealthScore.breakdown.tax)}%</span>
+                        <div
+                          className="mini-bar"
+                          style={{
+                            width: `${Math.min(100, moneyHealthScore.breakdown.tax * 6.67)}%`,
+                          }}
+                        ></div>
+                        <span className="health-value">
+                          {Math.round(moneyHealthScore.breakdown.tax)}%
+                        </span>
                       </div>
                       <div className="health-item">
                         <span className="health-label">Retirement</span>
-                        <div className="mini-bar" style={{ width: `${Math.min(100, moneyHealthScore.breakdown.retirement * 6.67)}%` }}></div>
-                        <span className="health-value">{Math.round(moneyHealthScore.breakdown.retirement)}%</span>
+                        <div
+                          className="mini-bar"
+                          style={{
+                            width: `${Math.min(100, moneyHealthScore.breakdown.retirement * 6.67)}%`,
+                          }}
+                        ></div>
+                        <span className="health-value">
+                          {Math.round(moneyHealthScore.breakdown.retirement)}%
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1399,7 +1889,11 @@ function DashboardApp({ user, onLogout }) {
                     <div className="networth-divider">=</div>
                     <div className="networth-item total">
                       <p className="networth-label">Net Worth</p>
-                      <h3 style={{ color: netWorth.netWorth > 0 ? '#0f766e' : '#dc2626' }}>
+                      <h3
+                        style={{
+                          color: netWorth.netWorth > 0 ? "#0f766e" : "#dc2626",
+                        }}
+                      >
                         {formatINR(netWorth.netWorth)}
                       </h3>
                     </div>
@@ -1439,14 +1933,26 @@ function DashboardApp({ user, onLogout }) {
                       <div className="cf-arrow">=</div>
                       <div className="cashflow-item surplus">
                         <span className="cf-label">Surplus</span>
-                        <h4 style={{ color: cashFlow.surplus > 0 ? '#0f766e' : '#dc2626' }}>
+                        <h4
+                          style={{
+                            color: cashFlow.surplus > 0 ? "#0f766e" : "#dc2626",
+                          }}
+                        >
                           {formatINR(cashFlow.surplus)}
                         </h4>
                       </div>
                     </div>
                   </div>
                   <div className="cf-percentage">
-                    <p><strong>Savings Rate:</strong> {cashFlow.income > 0 ? ((cashFlow.surplus / cashFlow.income) * 100).toFixed(1) : "0.0"}%</p>
+                    <p>
+                      <strong>Savings Rate:</strong>{" "}
+                      {cashFlow.income > 0
+                        ? ((cashFlow.surplus / cashFlow.income) * 100).toFixed(
+                            1,
+                          )
+                        : "0.0"}
+                      %
+                    </p>
                   </div>
                 </article>
 
@@ -1459,8 +1965,12 @@ function DashboardApp({ user, onLogout }) {
                       : `Only ${formatINR(Math.max(0, budgetLeft))} remains. Shift to essentials to stay on target.`}
                   </p>
                   <div className="tag-row">
-                    <span className="tag">{budgetUsage.toFixed(1)}% budget used</span>
-                    <span className="tag">{goalProgress.toFixed(1)}% goal funded</span>
+                    <span className="tag">
+                      {budgetUsage.toFixed(1)}% budget used
+                    </span>
+                    <span className="tag">
+                      {goalProgress.toFixed(1)}% goal funded
+                    </span>
                     <span className="tag">{topCategory} highest category</span>
                   </div>
                 </article>
@@ -1469,7 +1979,10 @@ function DashboardApp({ user, onLogout }) {
               <div className="grid chart-grid">
                 <article className="card category-split-card">
                   <p className="card-label">Category Split</p>
-                  <svg className="chart-svg category-split-svg" viewBox="0 0 320 230">
+                  <svg
+                    className="chart-svg category-split-svg"
+                    viewBox="0 0 320 230"
+                  >
                     {donutTotal > 0 ? (
                       <>
                         {(() => {
@@ -1479,38 +1992,70 @@ function DashboardApp({ user, onLogout }) {
                           const radius = 62;
                           const stroke = 28;
                           const c = 2 * Math.PI * radius;
-                          return categoryTotals.slice(0, 5).map(([cat, amount], i) => {
-                            const share = amount / donutTotal;
-                            const len = c * share;
-                            const dash = `${len.toFixed(2)} ${(c - len).toFixed(2)}`;
-                            const offset = (-acc * c).toFixed(2);
-                            acc += share;
-                            const y = 54 + i * 30;
-                            return (
-                              <g key={cat}>
-                                <circle
-                                  cx={cx}
-                                  cy={cy}
-                                  r={radius}
-                                  fill="none"
-                                  stroke={donutColors[i % donutColors.length]}
-                                  strokeWidth={stroke}
-                                  strokeDasharray={dash}
-                                  strokeDashoffset={offset}
-                                  transform={`rotate(-90 ${cx} ${cy})`}
-                                />
-                                <rect x="188" y={y - 10} width="10" height="10" fill={donutColors[i % donutColors.length]} rx="2" />
-                                <text x="204" y={y} className="chart-muted">{cat}</text>
-                              </g>
-                            );
-                          });
+                          return categoryTotals
+                            .slice(0, 5)
+                            .map(([cat, amount], i) => {
+                              const share = amount / donutTotal;
+                              const len = c * share;
+                              const dash = `${len.toFixed(2)} ${(c - len).toFixed(2)}`;
+                              const offset = (-acc * c).toFixed(2);
+                              acc += share;
+                              const y = 54 + i * 30;
+                              return (
+                                <g key={cat}>
+                                  <circle
+                                    cx={cx}
+                                    cy={cy}
+                                    r={radius}
+                                    fill="none"
+                                    stroke={donutColors[i % donutColors.length]}
+                                    strokeWidth={stroke}
+                                    strokeDasharray={dash}
+                                    strokeDashoffset={offset}
+                                    transform={`rotate(-90 ${cx} ${cy})`}
+                                  />
+                                  <rect
+                                    x="188"
+                                    y={y - 10}
+                                    width="10"
+                                    height="10"
+                                    fill={donutColors[i % donutColors.length]}
+                                    rx="2"
+                                  />
+                                  <text x="204" y={y} className="chart-muted">
+                                    {cat}
+                                  </text>
+                                </g>
+                              );
+                            });
                         })()}
-                        <circle cx="95" cy="115" r="38" fill="rgba(255,255,255,0.95)" />
-                        <text x="95" y="112" textAnchor="middle" className="chart-caption">{formatINR(donutTotal)}</text>
-                        <text x="95" y="128" textAnchor="middle" className="chart-muted">total spent</text>
+                        <circle
+                          cx="95"
+                          cy="115"
+                          r="38"
+                          fill="rgba(255,255,255,0.95)"
+                        />
+                        <text
+                          x="95"
+                          y="112"
+                          textAnchor="middle"
+                          className="chart-caption"
+                        >
+                          {formatINR(donutTotal)}
+                        </text>
+                        <text
+                          x="95"
+                          y="128"
+                          textAnchor="middle"
+                          className="chart-muted"
+                        >
+                          total spent
+                        </text>
                       </>
                     ) : (
-                      <text x="20" y="30" className="chart-caption">No spending data yet.</text>
+                      <text x="20" y="30" className="chart-caption">
+                        No spending data yet.
+                      </text>
                     )}
                   </svg>
                 </article>
@@ -1524,22 +2069,38 @@ function DashboardApp({ user, onLogout }) {
                 <article className="card ai-conversation-card">
                   <p className="card-label">Decision Conversation</p>
                   <div className="chat-feed">
-                    {chatMessages.map((msg, idx) => (
+                    {chatMessages.map((msg, idx) =>
                       msg.role === "user" ? (
-                        <div key={idx} className="msg user">{msg.text}</div>
+                        <div key={idx} className="msg user">
+                          {msg.text}
+                        </div>
                       ) : (
                         <div key={idx} className="msg ai">
                           <div className="ai-tiles">
-                            <div className="ai-tile ai-answer"><p>{msg.answer} {msg.impact}</p></div>
-                            <div className="ai-tile ai-why"><strong>Reason</strong><p>{msg.reasoning}</p></div>
+                            <div className="ai-tile ai-answer">
+                              <p>
+                                {msg.answer} {msg.impact}
+                              </p>
+                            </div>
+                            <div className="ai-tile ai-why">
+                              <strong>Reason</strong>
+                              <p>{msg.reasoning}</p>
+                            </div>
                           </div>
                         </div>
-                      )
-                    ))}
+                      ),
+                    )}
                   </div>
                   <form className="chat-form" onSubmit={submitChat}>
-                    <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} required disabled={chatPending} />
-                    <button type="submit" disabled={chatPending}>{chatPending ? "Sending..." : "Send"}</button>
+                    <input
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      required
+                      disabled={chatPending}
+                    />
+                    <button type="submit" disabled={chatPending}>
+                      {chatPending ? "Sending..." : "Send"}
+                    </button>
                   </form>
                   {chatError && <p className="auth-message">{chatError}</p>}
                 </article>
@@ -1567,9 +2128,18 @@ function DashboardApp({ user, onLogout }) {
                   <aside className="card">
                     <p className="card-label">Live Decision Snapshot</p>
                     <div className="snapshot">
-                      <p>Budget left this month: {formatINR(Math.max(0, budgetLeft))}</p>
-                      <p>Safe discretionary window: {formatINR(Math.max(0, budgetLeft * 0.45))}</p>
-                      <p>Goal momentum: {goalProgress.toFixed(1)}% complete ({goalStatus})</p>
+                      <p>
+                        Budget left this month:{" "}
+                        {formatINR(Math.max(0, budgetLeft))}
+                      </p>
+                      <p>
+                        Safe discretionary window:{" "}
+                        {formatINR(Math.max(0, budgetLeft * 0.45))}
+                      </p>
+                      <p>
+                        Goal momentum: {goalProgress.toFixed(1)}% complete (
+                        {goalStatus})
+                      </p>
                     </div>
                   </aside>
                 </div>
@@ -1585,8 +2155,13 @@ function DashboardApp({ user, onLogout }) {
                   <div className="stack">
                     {categoryTotals.slice(0, 5).map(([cat, amount], i) => (
                       <div key={cat} className="txn-item">
-                        <strong>Pattern {i + 1}: {cat}</strong><br />
-                        <small>{formatINR(amount)} spent so far this month</small>
+                        <strong>
+                          Pattern {i + 1}: {cat}
+                        </strong>
+                        <br />
+                        <small>
+                          {formatINR(amount)} spent so far this month
+                        </small>
                       </div>
                     ))}
                   </div>
@@ -1595,43 +2170,83 @@ function DashboardApp({ user, onLogout }) {
                   <p className="card-label">Agent Recommendations</p>
                   <div className="stack">
                     {insightsLoading && (
-                      <div className="txn-item"><strong>Loading</strong><br /><small>Fetching latest recommendations from backend agents...</small></div>
+                      <div className="txn-item">
+                        <strong>Loading</strong>
+                        <br />
+                        <small>
+                          Fetching latest recommendations from backend agents...
+                        </small>
+                      </div>
                     )}
                     {!insightsLoading && agentInsights.tax?.tax_analysis && (
                       <div className="txn-item">
-                        <strong>Tax Wizard</strong><br />
+                        <strong>Tax Wizard</strong>
+                        <br />
                         <small>
-                          Best regime: {agentInsights.tax.tax_analysis.best_option}. Missing deductions: {(agentInsights.tax.tax_analysis.missing_deductions || []).join(", ") || "none"}.
+                          Best regime:{" "}
+                          {agentInsights.tax.tax_analysis.best_option}. Missing
+                          deductions:{" "}
+                          {(
+                            agentInsights.tax.tax_analysis.missing_deductions ||
+                            []
+                          ).join(", ") || "none"}
+                          .
                         </small>
                       </div>
                     )}
                     {!insightsLoading && agentInsights.fire?.fire_plan && (
                       <div className="txn-item">
-                        <strong>FIRE Planner</strong><br />
+                        <strong>FIRE Planner</strong>
+                        <br />
                         <small>
-                          Monthly SIP target: {formatINR(agentInsights.fire.fire_plan.monthly_sip)}. Years to retire: {agentInsights.fire.fire_plan.timeline?.years_to_retire ?? "-"}.
+                          Monthly SIP target:{" "}
+                          {formatINR(agentInsights.fire.fire_plan.monthly_sip)}.
+                          Years to retire:{" "}
+                          {agentInsights.fire.fire_plan.timeline
+                            ?.years_to_retire ?? "-"}
+                          .
                         </small>
                       </div>
                     )}
-                    {!insightsLoading && agentInsights.lifeEvent?.life_event_plan && (
-                      <div className="txn-item">
-                        <strong>Life Event Planner</strong><br />
-                        <small>
-                          {agentInsights.lifeEvent.life_event_plan.suggestions?.[0] || "Life event strategy is available."}
-                        </small>
-                      </div>
-                    )}
+                    {!insightsLoading &&
+                      agentInsights.lifeEvent?.life_event_plan && (
+                        <div className="txn-item">
+                          <strong>Life Event Planner</strong>
+                          <br />
+                          <small>
+                            {agentInsights.lifeEvent.life_event_plan
+                              .suggestions?.[0] ||
+                              "Life event strategy is available."}
+                          </small>
+                        </div>
+                      )}
                     {!insightsLoading && agentInsights.couple?.couple_plan && (
                       <div className="txn-item">
-                        <strong>Couple Planner</strong><br />
+                        <strong>Couple Planner</strong>
+                        <br />
                         <small>
-                          Combined income estimate: {formatINR(agentInsights.couple.couple_plan.combined_income)}.
+                          Combined income estimate:{" "}
+                          {formatINR(
+                            agentInsights.couple.couple_plan.combined_income,
+                          )}
+                          .
                         </small>
                       </div>
                     )}
-                    {!insightsLoading && !agentInsights.tax && !agentInsights.fire && !agentInsights.lifeEvent && !agentInsights.couple && (
-                      <div className="txn-item"><strong>No Data</strong><br /><small>Unable to fetch endpoint-driven insights at the moment.</small></div>
-                    )}
+                    {!insightsLoading &&
+                      !agentInsights.tax &&
+                      !agentInsights.fire &&
+                      !agentInsights.lifeEvent &&
+                      !agentInsights.couple && (
+                        <div className="txn-item">
+                          <strong>No Data</strong>
+                          <br />
+                          <small>
+                            Unable to fetch endpoint-driven insights at the
+                            moment.
+                          </small>
+                        </div>
+                      )}
                   </div>
                 </article>
               </div>
@@ -1644,15 +2259,33 @@ function DashboardApp({ user, onLogout }) {
                 <article className="card">
                   <p className="card-label">Primary Goal</p>
                   <h3>{finance.goal.name}</h3>
-                  <p>{formatINR(finance.goal.saved)} saved of {formatINR(finance.goal.target)}.</p>
-                  <div className="meter goal"><div className="meter-fill" style={{ width: `${goalProgress}%` }}></div></div>
+                  <p>
+                    {formatINR(finance.goal.saved)} saved of{" "}
+                    {formatINR(finance.goal.target)}.
+                  </p>
+                  <div className="meter goal">
+                    <div
+                      className="meter-fill"
+                      style={{ width: `${goalProgress}%` }}
+                    ></div>
+                  </div>
                 </article>
                 <article className="card">
                   <p className="card-label">Plan Actions</p>
                   <div className="stack">
-                    <div className="txn-item"><small>Auto-allocate INR 3000 after next salary.</small></div>
-                    <div className="txn-item"><small>Pause one non-essential category for 10 days.</small></div>
-                    <div className="txn-item"><small>Use AI checks before purchases above INR 2500.</small></div>
+                    <div className="txn-item">
+                      <small>Auto-allocate INR 3000 after next salary.</small>
+                    </div>
+                    <div className="txn-item">
+                      <small>
+                        Pause one non-essential category for 10 days.
+                      </small>
+                    </div>
+                    <div className="txn-item">
+                      <small>
+                        Use AI checks before purchases above INR 2500.
+                      </small>
+                    </div>
                   </div>
                 </article>
               </div>
@@ -1667,14 +2300,25 @@ function DashboardApp({ user, onLogout }) {
                   <form className="txn-form" onSubmit={addTransaction}>
                     <label>
                       Transaction Type
-                      <select value={txnForm.type} onChange={(e) => setTxnForm((p) => ({ ...p, type: e.target.value }))}>
+                      <select
+                        value={txnForm.type}
+                        onChange={(e) =>
+                          setTxnForm((p) => ({ ...p, type: e.target.value }))
+                        }
+                      >
                         <option>Debit</option>
                         <option>Credit</option>
                       </select>
                     </label>
                     <label>
                       Description
-                      <input value={txnForm.desc} onChange={(e) => setTxnForm((p) => ({ ...p, desc: e.target.value }))} required />
+                      <input
+                        value={txnForm.desc}
+                        onChange={(e) =>
+                          setTxnForm((p) => ({ ...p, desc: e.target.value }))
+                        }
+                        required
+                      />
                     </label>
                     <label>
                       Amount (INR)
@@ -1682,7 +2326,9 @@ function DashboardApp({ user, onLogout }) {
                         type="number"
                         min="1"
                         value={txnForm.amount}
-                        onChange={(e) => setTxnForm((p) => ({ ...p, amount: e.target.value }))}
+                        onChange={(e) =>
+                          setTxnForm((p) => ({ ...p, amount: e.target.value }))
+                        }
                         required
                       />
                     </label>
@@ -1701,8 +2347,16 @@ function DashboardApp({ user, onLogout }) {
                         <div className="txn-item" key={`${txn.desc}-${idx}`}>
                           <div className="row">
                             <strong>{txn.desc}</strong>
-                            <strong style={{ color: txn.amount >= 0 ? "var(--good)" : "var(--warn)" }}>
-                              {txn.amount >= 0 ? "+" : "-"}{formatINR(Math.abs(txn.amount))}
+                            <strong
+                              style={{
+                                color:
+                                  txn.amount >= 0
+                                    ? "var(--good)"
+                                    : "var(--warn)",
+                              }}
+                            >
+                              {txn.amount >= 0 ? "+" : "-"}
+                              {formatINR(Math.abs(txn.amount))}
                             </strong>
                           </div>
                           <small>{txn.category}</small>
@@ -1718,43 +2372,98 @@ function DashboardApp({ user, onLogout }) {
 
       {/* Profile Modal */}
       {showProfileModal && (
-        <div className="profile-modal-overlay" onClick={() => setShowProfileModal(false)}>
+        <div
+          className="profile-modal-overlay"
+          onClick={() => setShowProfileModal(false)}
+        >
           <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-header">
               <h3>Complete Your Profile</h3>
-              <button className="close-btn" onClick={() => setShowProfileModal(false)}>×</button>
+              <button
+                className="close-btn"
+                onClick={() => setShowProfileModal(false)}
+              >
+                ×
+              </button>
             </div>
-            
+
             <div className="profile-progress">
               <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${profileCompletion}%` }}></div>
+                <div
+                  className="progress-fill"
+                  style={{ width: `${profileCompletion}%` }}
+                ></div>
               </div>
-              <p className="progress-text">{profileCompletion}% Complete • Section {currentProfileSection + 1} of {profileSections.length}</p>
+              <p className="progress-text">
+                {profileCompletion}% Complete • Section{" "}
+                {currentProfileSection + 1} of {profileSections.length}
+              </p>
             </div>
 
             <div className="profile-content">
-              <p className="card-label">{profileSections[currentProfileSection]}</p>
+              <p className="card-label">
+                {profileSections[currentProfileSection]}
+              </p>
 
               {currentProfileSection === 0 && (
                 <div className="profile-section">
                   <h4>Personal Information</h4>
                   <div className="form-group">
-                    <label>Age
-                      <input type="number" value={profileData.personalInfo.age} onChange={(e) => updateProfileField("personalInfo.age", e.target.value)} min="18" max="120" />
+                    <label>
+                      Age
+                      <input
+                        type="number"
+                        value={profileData.personalInfo.age}
+                        onChange={(e) =>
+                          updateProfileField("personalInfo.age", e.target.value)
+                        }
+                        min="18"
+                        max="120"
+                      />
                     </label>
-                    <label>City
-                      <input type="text" value={profileData.personalInfo.city} onChange={(e) => updateProfileField("personalInfo.city", e.target.value)} />
+                    <label>
+                      City
+                      <input
+                        type="text"
+                        value={profileData.personalInfo.city}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "personalInfo.city",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
-                    <label>Marital Status
-                      <select value={profileData.personalInfo.maritalStatus} onChange={(e) => updateProfileField("personalInfo.maritalStatus", e.target.value)}>
+                    <label>
+                      Marital Status
+                      <select
+                        value={profileData.personalInfo.maritalStatus}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "personalInfo.maritalStatus",
+                            e.target.value,
+                          )
+                        }
+                      >
                         <option value="">Select...</option>
                         <option value="Single">Single</option>
                         <option value="Married">Married</option>
                         <option value="Divorced">Divorced</option>
                       </select>
                     </label>
-                    <label>Dependents
-                      <input type="number" value={profileData.personalInfo.dependents} onChange={(e) => updateProfileField("personalInfo.dependents", e.target.value)} min="0" />
+                    <label>
+                      Dependents
+                      <input
+                        type="number"
+                        value={profileData.personalInfo.dependents}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "personalInfo.dependents",
+                            e.target.value,
+                          )
+                        }
+                        min="0"
+                      />
                     </label>
                   </div>
                 </div>
@@ -1764,20 +2473,64 @@ function DashboardApp({ user, onLogout }) {
                 <div className="profile-section">
                   <h4>Income Details</h4>
                   <div className="form-group">
-                    <label>Base Salary (Annual)
-                      <input type="number" value={profileData.income.baseSalary} onChange={(e) => updateProfileField("income.baseSalary", e.target.value)} />
+                    <label>
+                      Base Salary (Annual)
+                      <input
+                        type="number"
+                        value={profileData.income.baseSalary}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "income.baseSalary",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
-                    <label>HRA (Annual)
-                      <input type="number" value={profileData.income.hra} onChange={(e) => updateProfileField("income.hra", e.target.value)} />
+                    <label>
+                      HRA (Annual)
+                      <input
+                        type="number"
+                        value={profileData.income.hra}
+                        onChange={(e) =>
+                          updateProfileField("income.hra", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>Other Allowances
-                      <input type="number" value={profileData.income.otherAllowances} onChange={(e) => updateProfileField("income.otherAllowances", e.target.value)} />
+                    <label>
+                      Other Allowances
+                      <input
+                        type="number"
+                        value={profileData.income.otherAllowances}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "income.otherAllowances",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
-                    <label>Bonus (Optional)
-                      <input type="number" value={profileData.income.bonus} onChange={(e) => updateProfileField("income.bonus", e.target.value)} />
+                    <label>
+                      Bonus (Optional)
+                      <input
+                        type="number"
+                        value={profileData.income.bonus}
+                        onChange={(e) =>
+                          updateProfileField("income.bonus", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>Other Income
-                      <input type="number" value={profileData.income.otherIncome} onChange={(e) => updateProfileField("income.otherIncome", e.target.value)} />
+                    <label>
+                      Other Income
+                      <input
+                        type="number"
+                        value={profileData.income.otherIncome}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "income.otherIncome",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
                   </div>
                 </div>
@@ -1787,20 +2540,58 @@ function DashboardApp({ user, onLogout }) {
                 <div className="profile-section">
                   <h4>Monthly Expenses</h4>
                   <div className="form-group">
-                    <label>Rent
-                      <input type="number" value={profileData.expenses.rent} onChange={(e) => updateProfileField("expenses.rent", e.target.value)} />
+                    <label>
+                      Rent
+                      <input
+                        type="number"
+                        value={profileData.expenses.rent}
+                        onChange={(e) =>
+                          updateProfileField("expenses.rent", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>Food
-                      <input type="number" value={profileData.expenses.food} onChange={(e) => updateProfileField("expenses.food", e.target.value)} />
+                    <label>
+                      Food
+                      <input
+                        type="number"
+                        value={profileData.expenses.food}
+                        onChange={(e) =>
+                          updateProfileField("expenses.food", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>Travel
-                      <input type="number" value={profileData.expenses.travel} onChange={(e) => updateProfileField("expenses.travel", e.target.value)} />
+                    <label>
+                      Travel
+                      <input
+                        type="number"
+                        value={profileData.expenses.travel}
+                        onChange={(e) =>
+                          updateProfileField("expenses.travel", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>Subscriptions
-                      <input type="number" value={profileData.expenses.subscriptions} onChange={(e) => updateProfileField("expenses.subscriptions", e.target.value)} />
+                    <label>
+                      Subscriptions
+                      <input
+                        type="number"
+                        value={profileData.expenses.subscriptions}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "expenses.subscriptions",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
-                    <label>Misc
-                      <input type="number" value={profileData.expenses.misc} onChange={(e) => updateProfileField("expenses.misc", e.target.value)} />
+                    <label>
+                      Misc
+                      <input
+                        type="number"
+                        value={profileData.expenses.misc}
+                        onChange={(e) =>
+                          updateProfileField("expenses.misc", e.target.value)
+                        }
+                      />
                     </label>
                   </div>
                 </div>
@@ -1810,20 +2601,58 @@ function DashboardApp({ user, onLogout }) {
                 <div className="profile-section">
                   <h4>Assets & Investments</h4>
                   <div className="form-group">
-                    <label>Mutual Funds
-                      <input type="number" value={profileData.assets.mutualFunds} onChange={(e) => updateProfileField("assets.mutualFunds", e.target.value)} />
+                    <label>
+                      Mutual Funds
+                      <input
+                        type="number"
+                        value={profileData.assets.mutualFunds}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "assets.mutualFunds",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
-                    <label>PPF
-                      <input type="number" value={profileData.assets.ppf} onChange={(e) => updateProfileField("assets.ppf", e.target.value)} />
+                    <label>
+                      PPF
+                      <input
+                        type="number"
+                        value={profileData.assets.ppf}
+                        onChange={(e) =>
+                          updateProfileField("assets.ppf", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>Stocks
-                      <input type="number" value={profileData.assets.stocks} onChange={(e) => updateProfileField("assets.stocks", e.target.value)} />
+                    <label>
+                      Stocks
+                      <input
+                        type="number"
+                        value={profileData.assets.stocks}
+                        onChange={(e) =>
+                          updateProfileField("assets.stocks", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>FD
-                      <input type="number" value={profileData.assets.fd} onChange={(e) => updateProfileField("assets.fd", e.target.value)} />
+                    <label>
+                      FD
+                      <input
+                        type="number"
+                        value={profileData.assets.fd}
+                        onChange={(e) =>
+                          updateProfileField("assets.fd", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>Cash
-                      <input type="number" value={profileData.assets.cash} onChange={(e) => updateProfileField("assets.cash", e.target.value)} />
+                    <label>
+                      Cash
+                      <input
+                        type="number"
+                        value={profileData.assets.cash}
+                        onChange={(e) =>
+                          updateProfileField("assets.cash", e.target.value)
+                        }
+                      />
                     </label>
                   </div>
                 </div>
@@ -1833,14 +2662,41 @@ function DashboardApp({ user, onLogout }) {
                 <div className="profile-section">
                   <h4>Liabilities</h4>
                   <div className="form-group">
-                    <label>Home Loan
-                      <input type="number" value={profileData.liabilities.homeLoan} onChange={(e) => updateProfileField("liabilities.homeLoan", e.target.value)} />
+                    <label>
+                      Home Loan
+                      <input
+                        type="number"
+                        value={profileData.liabilities.homeLoan}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "liabilities.homeLoan",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
-                    <label>EMI
-                      <input type="number" value={profileData.liabilities.emi} onChange={(e) => updateProfileField("liabilities.emi", e.target.value)} />
+                    <label>
+                      EMI
+                      <input
+                        type="number"
+                        value={profileData.liabilities.emi}
+                        onChange={(e) =>
+                          updateProfileField("liabilities.emi", e.target.value)
+                        }
+                      />
                     </label>
-                    <label>Credit Card Dues
-                      <input type="number" value={profileData.liabilities.creditCardDues} onChange={(e) => updateProfileField("liabilities.creditCardDues", e.target.value)} />
+                    <label>
+                      Credit Card Dues
+                      <input
+                        type="number"
+                        value={profileData.liabilities.creditCardDues}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "liabilities.creditCardDues",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
                   </div>
                 </div>
@@ -1850,11 +2706,31 @@ function DashboardApp({ user, onLogout }) {
                 <div className="profile-section">
                   <h4>Insurance</h4>
                   <div className="form-group">
-                    <label>Health Insurance
-                      <input type="number" value={profileData.insurance.healthInsurance} onChange={(e) => updateProfileField("insurance.healthInsurance", e.target.value)} />
+                    <label>
+                      Health Insurance
+                      <input
+                        type="number"
+                        value={profileData.insurance.healthInsurance}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "insurance.healthInsurance",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
-                    <label>Life Insurance
-                      <input type="number" value={profileData.insurance.lifeInsurance} onChange={(e) => updateProfileField("insurance.lifeInsurance", e.target.value)} />
+                    <label>
+                      Life Insurance
+                      <input
+                        type="number"
+                        value={profileData.insurance.lifeInsurance}
+                        onChange={(e) =>
+                          updateProfileField(
+                            "insurance.lifeInsurance",
+                            e.target.value,
+                          )
+                        }
+                      />
                     </label>
                   </div>
                 </div>
@@ -1867,11 +2743,29 @@ function DashboardApp({ user, onLogout }) {
                     {profileData.goals.map((goal, idx) => (
                       <div key={goal.type} className="goal-group">
                         <h4>{goal.type}</h4>
-                        <label>Target Amount
-                          <input type="number" value={goal.targetAmount} onChange={(e) => updateProfileGoal(idx, "targetAmount", e.target.value)} />
+                        <label>
+                          Target Amount
+                          <input
+                            type="number"
+                            value={goal.targetAmount}
+                            onChange={(e) =>
+                              updateProfileGoal(
+                                idx,
+                                "targetAmount",
+                                e.target.value,
+                              )
+                            }
+                          />
                         </label>
-                        <label>Time Horizon (Years)
-                          <input type="number" value={goal.years} onChange={(e) => updateProfileGoal(idx, "years", e.target.value)} />
+                        <label>
+                          Time Horizon (Years)
+                          <input
+                            type="number"
+                            value={goal.years}
+                            onChange={(e) =>
+                              updateProfileGoal(idx, "years", e.target.value)
+                            }
+                          />
                         </label>
                       </div>
                     ))}
@@ -1884,15 +2778,36 @@ function DashboardApp({ user, onLogout }) {
                   <h4>Investment Risk Profile</h4>
                   <div className="radio-options">
                     <label>
-                      <input type="radio" value="Conservative" checked={profileData.riskProfile === "Conservative"} onChange={(e) => updateProfileField("riskProfile", e.target.value)} />
+                      <input
+                        type="radio"
+                        value="Conservative"
+                        checked={profileData.riskProfile === "Conservative"}
+                        onChange={(e) =>
+                          updateProfileField("riskProfile", e.target.value)
+                        }
+                      />
                       Conservative (Stable, Low Volatility)
                     </label>
                     <label>
-                      <input type="radio" value="Moderate" checked={profileData.riskProfile === "Moderate"} onChange={(e) => updateProfileField("riskProfile", e.target.value)} />
+                      <input
+                        type="radio"
+                        value="Moderate"
+                        checked={profileData.riskProfile === "Moderate"}
+                        onChange={(e) =>
+                          updateProfileField("riskProfile", e.target.value)
+                        }
+                      />
                       Moderate (Balanced Growth)
                     </label>
                     <label>
-                      <input type="radio" value="Aggressive" checked={profileData.riskProfile === "Aggressive"} onChange={(e) => updateProfileField("riskProfile", e.target.value)} />
+                      <input
+                        type="radio"
+                        value="Aggressive"
+                        checked={profileData.riskProfile === "Aggressive"}
+                        onChange={(e) =>
+                          updateProfileField("riskProfile", e.target.value)
+                        }
+                      />
                       Aggressive (High Growth)
                     </label>
                   </div>
@@ -1901,10 +2816,18 @@ function DashboardApp({ user, onLogout }) {
             </div>
 
             <div className="profile-actions">
-              <button className="btn-prev" onClick={() => setCurrentProfileSection(Math.max(0, currentProfileSection - 1))} disabled={currentProfileSection === 0}>
+              <button
+                className="btn-prev"
+                onClick={() =>
+                  setCurrentProfileSection(
+                    Math.max(0, currentProfileSection - 1),
+                  )
+                }
+                disabled={currentProfileSection === 0}
+              >
                 ← Previous
               </button>
-              <button 
+              <button
                 className="btn-secondary-action"
                 onClick={() => {
                   saveOnboarding(user.email, profileData);
@@ -1913,8 +2836,8 @@ function DashboardApp({ user, onLogout }) {
               >
                 Fill it Later
               </button>
-              <button 
-                className="btn-next" 
+              <button
+                className="btn-next"
                 onClick={() => {
                   saveOnboarding(user.email, profileData);
                   if (currentProfileSection < profileSections.length - 1) {
@@ -1924,7 +2847,9 @@ function DashboardApp({ user, onLogout }) {
                   }
                 }}
               >
-                {currentProfileSection === profileSections.length - 1 ? "Save & Close" : "Next Section →"}
+                {currentProfileSection === profileSections.length - 1
+                  ? "Save & Close"
+                  : "Next Section →"}
               </button>
             </div>
           </div>
@@ -1945,7 +2870,9 @@ export default function App() {
   useEffect(() => {
     const session = getSession();
     if (session) {
-      const user = getUsers().find((u) => u.email.toLowerCase() === session.email.toLowerCase());
+      const user = getUsers().find(
+        (u) => u.email.toLowerCase() === session.email.toLowerCase(),
+      );
       if (user) setSessionUser(user);
     }
   }, []);
@@ -1958,12 +2885,18 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage onLogin={setSessionUser} />} />
-      <Route path="/signup" element={<SignupPage onSignup={setSessionUser} />} />
+      <Route
+        path="/signup"
+        element={<SignupPage onSignup={setSessionUser} />}
+      />
       <Route
         path="/onboarding"
         element={
           <ProtectedRoute sessionUser={sessionUser}>
-            <OnboardingPage user={sessionUser} onComplete={() => setSessionUser(sessionUser)} />
+            <OnboardingPage
+              user={sessionUser}
+              onComplete={() => setSessionUser(sessionUser)}
+            />
           </ProtectedRoute>
         }
       />
@@ -1983,7 +2916,42 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to={sessionUser ? "/" : "/login"} replace />} />
+      <Route
+        path="/tax-planner"
+        element={
+          <ProtectedRoute sessionUser={sessionUser}>
+            <TaxPlanner />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/portfolio-analyzer"
+        element={
+          <ProtectedRoute sessionUser={sessionUser}>
+            <PortfolioAnalyzer />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/life-event"
+        element={
+          <ProtectedRoute sessionUser={sessionUser}>
+            <LifeEventPlanner />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/couple-planner"
+        element={
+          <ProtectedRoute sessionUser={sessionUser}>
+            <CouplePlanner />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="*"
+        element={<Navigate to={sessionUser ? "/" : "/login"} replace />}
+      />
     </Routes>
   );
 }

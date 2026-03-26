@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 const initialValues = {
   current_age: "",
@@ -93,8 +93,6 @@ export default function FireForm({ onSubmit }) {
     return nextErrors;
   };
 
-  const hasErrors = useMemo(() => Object.keys(errors).length > 0, [errors]);
-
   const handleSubmit = (event) => {
     event.preventDefault();
     const nextErrors = validate(values);
@@ -113,10 +111,23 @@ export default function FireForm({ onSubmit }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="block text-sm text-slate-200">
-          Current Age
+    <form onSubmit={handleSubmit} className="fire-form">
+      <div className="fire-form-header">
+        <div>
+          <h2>Craft your timeline</h2>
+          <p>Provide the essentials to model your path to independence.</p>
+        </div>
+        <div className="fire-form-chip">FIRE Blueprint</div>
+      </div>
+
+      <div className="fire-form-grid">
+        <label className="fire-label">
+          <span className="fire-label-title">
+            <span className="fire-label-icon" aria-hidden="true">
+              🎯
+            </span>
+            Current Age
+          </span>
           <input
             type="number"
             name="current_age"
@@ -124,16 +135,21 @@ export default function FireForm({ onSubmit }) {
             onChange={handleChange}
             min="18"
             max="120"
-            className="mt-2 w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="fire-input"
             placeholder="28"
           />
           {errors.current_age && (
-            <p className="mt-1 text-xs text-rose-300">{errors.current_age}</p>
+            <span className="fire-error-text">{errors.current_age}</span>
           )}
         </label>
 
-        <label className="block text-sm text-slate-200">
-          Retirement Age
+        <label className="fire-label">
+          <span className="fire-label-title">
+            <span className="fire-label-icon" aria-hidden="true">
+              🏁
+            </span>
+            Retirement Age
+          </span>
           <input
             type="number"
             name="retirement_age"
@@ -141,77 +157,91 @@ export default function FireForm({ onSubmit }) {
             onChange={handleChange}
             min="30"
             max="120"
-            className="mt-2 w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="fire-input"
             placeholder="50"
           />
           {errors.retirement_age && (
-            <p className="mt-1 text-xs text-rose-300">
-              {errors.retirement_age}
-            </p>
+            <span className="fire-error-text">{errors.retirement_age}</span>
           )}
         </label>
 
-        <label className="block text-sm text-slate-200">
-          Monthly Income
+        <label className="fire-label">
+          <span className="fire-label-title">
+            <span className="fire-label-icon" aria-hidden="true">
+              💸
+            </span>
+            Monthly Income
+          </span>
           <input
             type="number"
             name="monthly_income"
             value={values.monthly_income}
             onChange={handleChange}
             min="0"
-            className="mt-2 w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="fire-input"
             placeholder="4500"
           />
           {errors.monthly_income && (
-            <p className="mt-1 text-xs text-rose-300">
-              {errors.monthly_income}
-            </p>
+            <span className="fire-error-text">{errors.monthly_income}</span>
           )}
         </label>
 
-        <label className="block text-sm text-slate-200">
-          Monthly Expenses
+        <label className="fire-label">
+          <span className="fire-label-title">
+            <span className="fire-label-icon" aria-hidden="true">
+              🧾
+            </span>
+            Monthly Expenses
+          </span>
           <input
             type="number"
             name="monthly_expenses"
             value={values.monthly_expenses}
             onChange={handleChange}
             min="0"
-            className="mt-2 w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="fire-input"
             placeholder="2600"
           />
           {errors.monthly_expenses && (
-            <p className="mt-1 text-xs text-rose-300">
-              {errors.monthly_expenses}
-            </p>
+            <span className="fire-error-text">{errors.monthly_expenses}</span>
           )}
         </label>
 
-        <label className="block text-sm text-slate-200">
-          Current Investments
+        <label className="fire-label">
+          <span className="fire-label-title">
+            <span className="fire-label-icon" aria-hidden="true">
+              🏦
+            </span>
+            Current Investments
+          </span>
           <input
             type="number"
             name="current_investments"
             value={values.current_investments}
             onChange={handleChange}
             min="0"
-            className="mt-2 w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="fire-input"
             placeholder="25000"
           />
           {errors.current_investments && (
-            <p className="mt-1 text-xs text-rose-300">
+            <span className="fire-error-text">
               {errors.current_investments}
-            </p>
+            </span>
           )}
         </label>
 
-        <label className="block text-sm text-slate-200">
-          Risk Level
+        <label className="fire-label">
+          <span className="fire-label-title">
+            <span className="fire-label-icon" aria-hidden="true">
+              🧭
+            </span>
+            Risk Level
+          </span>
           <select
             name="risk_level"
             value={values.risk_level}
             onChange={handleChange}
-            className="mt-2 w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="fire-input"
           >
             {riskOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -220,18 +250,19 @@ export default function FireForm({ onSubmit }) {
             ))}
           </select>
           {errors.risk_level && (
-            <p className="mt-1 text-xs text-rose-300">{errors.risk_level}</p>
+            <span className="fire-error-text">{errors.risk_level}</span>
           )}
         </label>
       </div>
 
-      <button
-        type="submit"
-        className="w-full md:w-auto px-6 py-2.5 rounded-full bg-emerald-400 text-slate-900 font-semibold text-sm tracking-wide shadow-lg shadow-emerald-500/20 hover:bg-emerald-300 transition"
-        disabled={hasErrors}
-      >
-        Generate FIRE Plan
-      </button>
+      <div className="fire-actions">
+        <button type="submit" className="fire-button">
+          Generate FIRE Plan
+        </button>
+        <p className="fire-helper">
+          We never store your entries without consent.
+        </p>
+      </div>
     </form>
   );
 }

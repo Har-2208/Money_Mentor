@@ -29,45 +29,51 @@ export default function FirePlanner() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-4xl">
-        <div className="bg-slate-900/70 border border-slate-800 rounded-2xl shadow-2xl p-6 md:p-10">
-          <header className="text-center mb-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-emerald-400">
-              Plan Your Exit
-            </p>
-            <h1 className="text-3xl md:text-4xl font-semibold mt-2">
-              FIRE Planner
-            </h1>
-            <p className="text-slate-300 mt-3">
+    <div className="fire-page">
+      <div className="fire-shell">
+        <header className="fire-hero">
+          <div>
+            <p className="fire-eyebrow">Plan Your Future</p>
+            <h1>🔥 FIRE Planner - Plan Your Future</h1>
+            <p className="fire-subtitle">
               Estimate your path to financial independence and early retirement.
             </p>
-          </header>
-
-          <div className="space-y-6">
-            <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 md:p-6">
-              <FireForm onSubmit={handleSubmit} />
-            </div>
-
-            {loading && (
-              <div className="flex items-center justify-center gap-3 text-emerald-300">
-                <span className="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="text-sm">Calculating your FIRE plan...</span>
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-rose-950/40 border border-rose-800/70 text-rose-200 rounded-xl p-4 text-sm">
-                {error}
-              </div>
-            )}
-
-            {result && !loading && (
-              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 md:p-6">
-                <FireResult result={result} />
-              </div>
-            )}
           </div>
+          <div className="fire-hero-panel">
+            <div className="fire-hero-card">
+              <p className="fire-hero-label">Goal Horizon</p>
+              <p className="fire-hero-value">Early retirement in focus</p>
+              <p className="fire-hero-meta">
+                Snapshot of your glide path, updated every time you submit.
+              </p>
+            </div>
+            <div className="fire-hero-card muted">
+              <p className="fire-hero-label">Strategy Mode</p>
+              <p className="fire-hero-value">Build, invest, iterate</p>
+              <p className="fire-hero-meta">Balance growth with resilience.</p>
+            </div>
+          </div>
+        </header>
+
+        <div className="fire-card">
+          <FireForm onSubmit={handleSubmit} />
+        </div>
+
+        {loading && (
+          <div className="fire-status">
+            <span className="fire-pulse" aria-hidden="true"></span>
+            <span>Calculating your FIRE plan...</span>
+          </div>
+        )}
+
+        {error && <div className="fire-error">{error}</div>}
+
+        <div
+          className={`fire-card fire-result-shell ${
+            result && !loading ? "is-visible" : "is-hidden"
+          }`}
+        >
+          {result && !loading && <FireResult result={result} />}
         </div>
       </div>
     </div>

@@ -1,66 +1,104 @@
 function formatINR(value) {
-	const amount = Number(value || 0);
-	return `INR ${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  const amount = Number(value || 0);
+  return `₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 function formatPercent(value) {
-	const percentage = Number(value || 0) * 100;
-	return `${percentage.toFixed(0)}%`;
+  const percentage = Number(value || 0) * 100;
+  return `${percentage.toFixed(0)}%`;
 }
 
 export default function FireResult({ result }) {
-	const plan = result?.fire_plan;
+  const plan = result?.fire_plan;
 
-	if (!plan) {
-		return (
-			<div className="text-sm text-slate-300">
-				No FIRE plan data was returned by the server.
-			</div>
-		);
-	}
+  if (!plan) {
+    return (
+      <div className="fire-empty">
+        No FIRE plan data was returned by the server.
+      </div>
+    );
+  }
 
-	const allocationEntries = Object.entries(plan.asset_allocation || {});
+  const allocationEntries = Object.entries(plan.asset_allocation || {});
+  const summaryCards = [
+    {
+      label: "Retirement Corpus",
+      value: formatINR(plan.target_corpus ?? plan.retirement_corpus),
+      icon: "🏁",
+    },
+    {
+      label: "Monthly SIP",
+      value: formatINR(plan.monthly_sip),
+      icon: "📈",
+    },
+    {
+      label: "Years to Retirement",
+      value: plan.timeline?.years_to_retire ?? plan.years_to_retire ?? "-",
+      icon: "⏳",
+    },
+    {
+      label: "Insurance Gap",
+      value: formatINR(plan.insurance_gap),
+      icon: "🛡️",
+    },
+  ];
 
-	return (
-		<div className="space-y-5">
-			<h2 className="text-lg md:text-xl font-semibold text-emerald-300">Your FIRE Plan</h2>
+  return (
+    <div className="fire-result">
+      <div className="fire-result-header">
+        <div>
+          <p className="fire-eyebrow">Your FIRE Plan</p>
+          <h2>Strategy Snapshot</h2>
+        </div>
+        <div className="fire-result-badge">Projection Ready</div>
+      </div>
 
-			<div className="grid gap-3 md:grid-cols-2">
-				<div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
-					<p className="text-xs uppercase tracking-wider text-slate-400">Monthly SIP Needed</p>
-					<p className="mt-1 text-2xl font-semibold text-white">{formatINR(plan.monthly_sip)}</p>
-				</div>
+      <div className="fire-metrics-grid">
+        {summaryCards.map((card) => (
+          <div key={card.label} className="fire-metric-card">
+            <p className="fire-metric-label">
+              {card.icon} {card.label}
+            </p>
+            <p className="fire-metric-value">{card.value}</p>
+          </div>
+        ))}
+      </div>
 
-				<div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
-					<p className="text-xs uppercase tracking-wider text-slate-400">Target Corpus</p>
-					<p className="mt-1 text-2xl font-semibold text-white">{formatINR(plan.target_corpus)}</p>
-				</div>
-
-				<div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
-					<p className="text-xs uppercase tracking-wider text-slate-400">Years To Retire</p>
-					<p className="mt-1 text-2xl font-semibold text-white">{plan.timeline?.years_to_retire ?? "-"}</p>
-				</div>
-
-				<div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
-					<p className="text-xs uppercase tracking-wider text-slate-400">Insurance Gap</p>
-					<p className="mt-1 text-2xl font-semibold text-white">{formatINR(plan.insurance_gap)}</p>
-				</div>
-			</div>
-
-			<div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
-				<p className="text-xs uppercase tracking-wider text-slate-400">Suggested Asset Allocation</p>
-				<div className="mt-3 grid gap-2 md:grid-cols-3">
-					{allocationEntries.length === 0 && (
-						<p className="text-sm text-slate-300">No allocation breakdown available.</p>
-					)}
-					{allocationEntries.map(([asset, weight]) => (
-						<div key={asset} className="rounded-md bg-slate-800 px-3 py-2">
-							<p className="text-xs text-slate-400 capitalize">{asset}</p>
-							<p className="text-base font-medium text-emerald-300">{formatPercent(weight)}</p>
-						</div>
-					))}
-				</div>
-			</div>
-		</div>
-	);
+      <div className="fire-allocation">
+        <div className="fire-allocation-header">
+          <div>
+            <p className="fire-eyebrow">Suggested Asset Allocation</p>
+            <h3>Blend for balance</h3>
+          </div>
+          <span className="fire-allocation-note">
+            Auto-adjusted for risk level
+          </span>
+        </div>
+        <div className="fire-allocation-grid">
+          {allocationEntries.length === 0 && (
+            <p className="fire-empty">No allocation breakdown available.</p>
+          )}
+          {allocationEntries.map(([asset, weight]) => (
+            <div key={asset} className="fire-allocation-card">
+              <div>
+                <p className="fire-allocation-title">{asset}</p>
+                <p className="fire-allocation-value">{formatPercent(weight)}</p>
+              </div>
+              <div className="fire-bar">
+                <div
+                  className="fire-bar-fill"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(0, Number(weight || 0) * 100),
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }

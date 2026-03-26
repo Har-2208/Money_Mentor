@@ -4,25 +4,29 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
-async function generateFirePlan(formData) {
+async function uploadPortfolio(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
   try {
-    const response = await apiClient.post("/api/fire-plan", formData);
+    const response = await apiClient.post("/api/portfolio-analyze", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
     return response.data;
   } catch (error) {
     const message =
       error?.response?.data?.detail ||
       error?.response?.data?.message ||
       error?.message ||
-      "Failed to generate FIRE plan.";
+      "Failed to analyze portfolio.";
     throw new Error(message);
   }
 }
 
 export default {
-  generateFirePlan,
+  uploadPortfolio,
 };

@@ -9,20 +9,22 @@ const apiClient = axios.create({
   },
 });
 
-async function generateFirePlan(formData) {
+async function getAdvice(selectedEvent) {
   try {
-    const response = await apiClient.post("/api/fire-plan", formData);
+    const response = await apiClient.post("/api/life-event-advice", {
+      event: selectedEvent,
+    });
     return response.data;
   } catch (error) {
     const message =
       error?.response?.data?.detail ||
       error?.response?.data?.message ||
       error?.message ||
-      "Failed to generate FIRE plan.";
+      "Failed to fetch life event advice.";
     throw new Error(message);
   }
 }
 
 export default {
-  generateFirePlan,
+  getAdvice,
 };
