@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from backend.agents.behavior_agent import get_behavior_profile
 from backend.agents.compliance_agent import add_disclaimer
@@ -8,6 +8,7 @@ from backend.agents.portfolio_xray_crew import run_portfolio_xray_crew
 from backend.agents.tax_wizard_crew import run_tax_wizard_crew
 from backend.config import get_env_float
 from backend.db.user_repository import get_user_data
+from backend.services.gemini_services import ask_gemini
 from backend.tools.sip_calculator import calculate_sip
 
 
@@ -26,32 +27,103 @@ def detect_intent(query: str) -> str:
     return "general"
 
 
+def _to_float(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_int(value: Any, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clean_lines(text: str) -> List[str]:
+    lines: List[str] = []
+    for raw in (text or "").splitlines():
+        line = raw.strip().lstrip("-* ").strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _llm_bullet_suggestions(prompt: str, fallback: List[str], max_items: int = 4) -> List[str]:
+    text = ask_gemini(prompt)
+    if "Gemini is not configured" in text:
+        return fallback
+
+    lines = _clean_lines(text)
+    if not lines:
+        return fallback
+    return lines[:max_items]
+
+
+def _apply_fire_inputs(user_data: Dict[str, Any], profile_overrides: Dict[str, Any] | None) -> Dict[str, Any]:
+    if not profile_overrides:
+        return user_data
+
+    updated = copy.deepcopy(user_data)
+
+    if profile_overrides.get("monthly_income") is not None:
+        updated.setdefault("income", {})["salary"] = _to_float(profile_overrides.get("monthly_income")) * 12
+    if profile_overrides.get("monthly_expenses") is not None:
+        updated.setdefault("expenses", {})["total"] = _to_float(profile_overrides.get("monthly_expenses"))
+    if profile_overrides.get("current_age") is not None:
+        updated.setdefault("goals", {})["current_age"] = _to_int(profile_overrides.get("current_age"), 30)
+    if profile_overrides.get("retirement_age") is not None:
+        updated.setdefault("goals", {})["retirement_age"] = _to_int(profile_overrides.get("retirement_age"), 55)
+    if profile_overrides.get("current_investments") is not None:
+        updated.setdefault("investments", {})["current_corpus"] = _to_float(profile_overrides.get("current_investments"))
+
+    risk_level = str(profile_overrides.get("risk_level") or "").lower().strip()
+    if risk_level:
+        allocation_map = {
+            "conservative": {"equity": 0.5, "debt": 0.45, "gold": 0.05},
+            "moderate": {"equity": 0.65, "debt": 0.30, "gold": 0.05},
+            "aggressive": {"equity": 0.8, "debt": 0.15, "gold": 0.05},
+        }
+        updated.setdefault("investments", {})["current_allocation"] = allocation_map.get(
+            risk_level,
+            allocation_map["moderate"],
+        )
+
+    return updated
+
+
 def _build_fire_plan(user_data: Dict[str, Any], behavior: Dict[str, Any], retirement_age: int | None = None) -> Dict[str, Any]:
     inflation_rate = get_env_float("FIRE_INFLATION_RATE", 0.06)
     annual_return = get_env_float("FIRE_ANNUAL_RETURN", 0.12)
     swr = get_env_float("FIRE_SAFE_WITHDRAWAL_RATE", 0.04)
 
-    monthly_expense = float(user_data["expenses"]["total"])
-    current_age = int(user_data["goals"].get("current_age", 30))
-    selected_retirement_age = retirement_age or int(user_data["goals"].get("retirement_age", 55))
+    monthly_expense = _to_float(user_data.get("expenses", {}).get("total"), 0.0)
+    current_age = _to_int(user_data.get("goals", {}).get("current_age"), 30)
+    selected_retirement_age = retirement_age or _to_int(user_data.get("goals", {}).get("retirement_age"), 55)
 
     years_to_retire = max(selected_retirement_age - current_age, 1)
     adjusted_annual_expense = (monthly_expense * 12) * ((1 + inflation_rate) ** years_to_retire)
-    target_corpus = adjusted_annual_expense / swr
+    target_corpus = adjusted_annual_expense / swr if swr > 0 else 0.0
 
-    current_corpus = float(user_data["investments"].get("current_corpus", 0))
-    required_corpus = max(target_corpus - current_corpus, 0)
-    monthly_sip = calculate_sip(required_corpus, years_to_retire, annual_rate=annual_return)
+    current_corpus = _to_float(user_data.get("investments", {}).get("current_corpus"), 0.0)
+    required_corpus = max(target_corpus - current_corpus, 0.0)
+    monthly_sip = calculate_sip(required_corpus, years_to_retire, annual_rate=annual_return) if required_corpus > 0 else 0.0
 
     if behavior.get("adherence_score", 0.5) < 0.5:
         monthly_sip = monthly_sip * 0.9
 
-    allocation = user_data["investments"].get(
+    allocation = user_data.get("investments", {}).get(
         "current_allocation",
-        {"equity": 0.7, "debt": 0.25, "gold": 0.05},
+        {"equity": 0.65, "debt": 0.30, "gold": 0.05},
     )
 
-    insurance_gap = max((monthly_expense * 12 * 20) - float(user_data["income"]["salary"]), 0)
+    annual_income = _to_float(user_data.get("income", {}).get("salary"), 0.0)
+    insurance_gap = max((monthly_expense * 12 * 20) - annual_income, 0.0)
 
     return {
         "fire_plan": {
@@ -70,7 +142,6 @@ def recalculate_fire_plan_on_retirement_age_change(
     behavior: Dict[str, Any],
     new_retirement_age: int,
 ) -> Dict[str, Any]:
-    # Only timeline and SIP are recomputed for dynamic updates.
     updated = _build_fire_plan(user_data, behavior, retirement_age=new_retirement_age)
     existing = copy.deepcopy(existing_plan)
     existing.setdefault("fire_plan", {})
@@ -81,39 +152,126 @@ def recalculate_fire_plan_on_retirement_age_change(
 
 
 def _build_life_event_plan(user_data: Dict[str, Any], event: str) -> Dict[str, Any]:
-    bonus = float(user_data["income"].get("bonus", 0))
-    tax_impact = round(bonus * 0.30, 2)
-    allocation_strategy = {"emergency_fund": 0.3, "debt_reduction": 0.2, "equity_investing": 0.5}
-    suggestions = [
-        f"Event detected: {event}",
-        "Use windfall allocation buckets before lifestyle upgrades.",
+    annual_income = _to_float(user_data.get("income", {}).get("salary"), 0.0)
+    monthly_expense = _to_float(user_data.get("expenses", {}).get("total"), 0.0)
+    bonus = _to_float(user_data.get("income", {}).get("bonus"), 0.0)
+    tax_on_bonus = round(bonus * 0.30, 2)
+
+    emergency_target = round(monthly_expense * 6, 2)
+    allocation_strategy = [
+        f"Build emergency buffer toward INR {emergency_target:,.0f} first.",
+        "Split any event-linked windfall into safety, goals, and lifestyle buckets.",
+        "Refresh insurance and nominations after this life event.",
     ]
+
+    suggestions_prompt = (
+        "You are a financial planning assistant. "
+        f"User annual income INR {annual_income:.0f}, monthly expense INR {monthly_expense:.0f}, "
+        f"event '{event}'. Provide 4 concise bullet suggestions."
+    )
+    suggestions = _llm_bullet_suggestions(
+        suggestions_prompt,
+        [
+            "Stabilize liquidity before adding new recurring commitments.",
+            "Update monthly budget categories for the new life stage.",
+            "Re-evaluate tax-saving and protection coverage after this event.",
+            "Track progress with a 90-day follow-up review.",
+        ],
+    )
+
+    warnings: List[str] = []
+    if monthly_expense > 0 and bonus > 0 and bonus < monthly_expense * 2:
+        warnings.append("Bonus may not cover multi-month commitments. Keep contingency cash.")
+    if annual_income <= 0:
+        warnings.append("Income details are missing, so advice is based on limited inputs.")
+
     return {
         "life_event_plan": {
+            "event": event,
             "allocation_strategy": allocation_strategy,
-            "tax_impact": tax_impact,
+            "tax_impact": [f"Estimated tax on bonus component: INR {tax_on_bonus:,.2f}"],
             "suggestions": suggestions,
+            "warnings": warnings,
         }
     }
 
 
-def _build_couple_plan(user_data: Dict[str, Any]) -> Dict[str, Any]:
-    primary_salary = float(user_data["income"]["salary"])
-    partner_salary = float(user_data["partner"]["salary"])
-    combined_income = primary_salary + partner_salary
+def _build_couple_plan(user_data: Dict[str, Any], profile_overrides: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    profile_overrides = profile_overrides or {}
+
+    partner1_income = _to_float(profile_overrides.get("partner1_income"), _to_float(user_data.get("income", {}).get("salary"), 0.0))
+    partner2_income = _to_float(profile_overrides.get("partner2_income"), _to_float(user_data.get("partner", {}).get("salary"), 0.0))
+    partner1_expenses = _to_float(profile_overrides.get("partner1_expenses"), _to_float(user_data.get("expenses", {}).get("total"), 0.0) * 12)
+    partner2_expenses = _to_float(profile_overrides.get("partner2_expenses"), _to_float(user_data.get("expenses", {}).get("total"), 0.0) * 0.8 * 12)
+    partner1_investments = _to_float(profile_overrides.get("partner1_investments"), _to_float(user_data.get("investments", {}).get("current_corpus"), 0.0))
+    partner2_investments = _to_float(profile_overrides.get("partner2_investments"), _to_float(user_data.get("investments", {}).get("current_corpus"), 0.0) * 0.6)
+
+    shared_goals = str(profile_overrides.get("shared_goals") or "Shared emergency corpus and long-term goals").strip()
+    risk_preference = str(profile_overrides.get("risk_preference") or "moderate").strip().lower()
+
+    combined_income = partner1_income + partner2_income
+    combined_expenses = partner1_expenses + partner2_expenses
+    net_savings = max(combined_income - combined_expenses, 0.0)
+
+    investment_strategy = _llm_bullet_suggestions(
+        (
+            "You are a financial advisor assistant. Provide 3 concise investment strategy bullets "
+            f"for a couple with income INR {combined_income:.0f}, expenses INR {combined_expenses:.0f}, "
+            f"risk preference {risk_preference}, goals: {shared_goals}."
+        ),
+        [
+            "Maintain a shared emergency fund before increasing risk allocation.",
+            "Automate monthly SIP allocations linked to risk preference.",
+            "Rebalance jointly every 6 months and after major life changes.",
+        ],
+        max_items=3,
+    )
+
+    tax_suggestions = _llm_bullet_suggestions(
+        (
+            "Provide 3 concise Indian tax optimization bullets for a salaried couple "
+            f"with combined income INR {combined_income:.0f}."
+        ),
+        [
+            "Use both partners' 80C capacity efficiently before year-end.",
+            "Claim eligible 80D deductions through health insurance planning.",
+            "Evaluate old vs new regime each year before filing.",
+        ],
+        max_items=3,
+    )
+
+    goal_strategy = [
+        f"Prioritize and sequence goals: {shared_goals}.",
+        "Split contributions based on net take-home proportion.",
+        "Review progress quarterly and adjust for income changes.",
+    ]
 
     return {
         "couple_plan": {
-            "combined_income": combined_income,
-            "combined_80c_capacity": 300000,
-            "goal_strategy": "Pool emergency corpus first, then split equity goals by timeline.",
+            "partner1_income": round(partner1_income, 2),
+            "partner2_income": round(partner2_income, 2),
+            "partner1_expenses": round(partner1_expenses, 2),
+            "partner2_expenses": round(partner2_expenses, 2),
+            "partner1_investments": round(partner1_investments, 2),
+            "partner2_investments": round(partner2_investments, 2),
+            "combined_income": round(combined_income, 2),
+            "combined_expenses": round(combined_expenses, 2),
+            "net_savings": round(net_savings, 2),
+            "combined_80c_capacity": 150000 * 2,
+            "investment_strategy": investment_strategy,
+            "tax_suggestions": tax_suggestions,
+            "goal_strategy": goal_strategy,
         }
     }
 
 
-def run_fire_feature(user_id: int, retirement_age: int | None = None) -> Dict[str, Any]:
-    user_data = get_user_data(user_id)
-    behavior = get_behavior_profile(user_id)
+def run_fire_feature(
+    user_id: int,
+    retirement_age: int | None = None,
+    profile_overrides: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    user_data = _apply_fire_inputs(get_user_data(user_id), profile_overrides)
+    behavior = get_behavior_profile(user_id, user_data)
     if retirement_age is None:
         return _build_fire_plan(user_data, behavior)
 
@@ -123,19 +281,26 @@ def run_fire_feature(user_id: int, retirement_age: int | None = None) -> Dict[st
 
 def run_tax_feature(user_id: int, salary: float | None = None, deductions: Dict[str, float] | None = None) -> Dict[str, Any]:
     user_data = get_user_data(user_id)
-    resolved_salary = salary if salary is not None else float(user_data["income"]["salary"])
+    resolved_salary = salary if salary is not None else _to_float(user_data.get("income", {}).get("salary"), 0.0)
     resolved_deductions = deductions if deductions is not None else user_data.get("tax", {}).get("deductions", {})
     return run_tax_wizard_crew(resolved_salary, resolved_deductions)
 
 
-def run_life_event_feature(user_id: int, event: str) -> Dict[str, Any]:
+def run_life_event_feature(user_id: int, event: str, profile_overrides: Dict[str, Any] | None = None) -> Dict[str, Any]:
     user_data = get_user_data(user_id)
+    profile_overrides = profile_overrides or {}
+    if profile_overrides.get("annual_income") is not None:
+        user_data.setdefault("income", {})["salary"] = _to_float(profile_overrides.get("annual_income"))
+    if profile_overrides.get("monthly_expenses") is not None:
+        user_data.setdefault("expenses", {})["total"] = _to_float(profile_overrides.get("monthly_expenses"))
+    if profile_overrides.get("bonus") is not None:
+        user_data.setdefault("income", {})["bonus"] = _to_float(profile_overrides.get("bonus"))
     return _build_life_event_plan(user_data, event)
 
 
-def run_couple_feature(user_id: int) -> Dict[str, Any]:
+def run_couple_feature(user_id: int, profile_overrides: Dict[str, Any] | None = None) -> Dict[str, Any]:
     user_data = get_user_data(user_id)
-    return _build_couple_plan(user_data)
+    return _build_couple_plan(user_data, profile_overrides)
 
 
 def run_portfolio_feature(file_bytes: bytes) -> Dict[str, Any]:
@@ -145,12 +310,12 @@ def run_portfolio_feature(file_bytes: bytes) -> Dict[str, Any]:
 def orchestrator(query: str, user_id: int) -> Dict[str, Any]:
     intent = detect_intent(query)
     user_data = get_user_data(user_id)
-    behavior = get_behavior_profile(user_id)
+    behavior = get_behavior_profile(user_id, user_data)
 
     if intent == "retirement":
         result = _build_fire_plan(user_data, behavior)
     elif intent == "tax":
-        salary = float(user_data["income"]["salary"])
+        salary = _to_float(user_data.get("income", {}).get("salary"), 0.0)
         deductions = user_data.get("tax", {}).get("deductions", {})
         result = run_tax_wizard_crew(salary, deductions)
     elif intent == "life_event":
@@ -159,7 +324,7 @@ def orchestrator(query: str, user_id: int) -> Dict[str, Any]:
         result = _build_couple_plan(user_data)
     elif intent == "portfolio":
         result = {
-            "message": "Use the dedicated portfolio endpoint with CAMS PDF upload for portfolio_analysis output.",
+            "message": "Use the dedicated portfolio endpoint with CAMS PDF upload for portfolio analysis output.",
         }
     else:
         result = {

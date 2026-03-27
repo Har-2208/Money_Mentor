@@ -1,6 +1,7 @@
 import axios from "axios";
+import { getActiveUserId } from "../../services/userIdentity";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -9,10 +10,14 @@ const apiClient = axios.create({
   },
 });
 
-async function getAdvice(selectedEvent) {
+async function getAdvice(selectedEvent, context = {}) {
   try {
-    const response = await apiClient.post("/api/life-event-advice", {
+    const response = await apiClient.post("/feature/life-event", {
+      user_id: getActiveUserId(),
       event: selectedEvent,
+      annual_income: context?.annual_income ?? null,
+      monthly_expenses: context?.monthly_expenses ?? null,
+      bonus: context?.bonus ?? null,
     });
     return response.data;
   } catch (error) {

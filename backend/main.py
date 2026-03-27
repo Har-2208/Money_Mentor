@@ -37,6 +37,11 @@ class QueryRequest(BaseModel):
 class FireRequest(BaseModel):
     user_id: int
     retirement_age: int | None = None
+    current_age: int | None = None
+    monthly_income: float | None = None
+    monthly_expenses: float | None = None
+    current_investments: float | None = None
+    risk_level: str | None = None
 
 
 class TaxRequest(BaseModel):
@@ -48,10 +53,21 @@ class TaxRequest(BaseModel):
 class LifeEventRequest(BaseModel):
     user_id: int
     event: str
+    annual_income: float | None = None
+    monthly_expenses: float | None = None
+    bonus: float | None = None
 
 
 class CoupleRequest(BaseModel):
     user_id: int
+    partner1_income: float | None = None
+    partner1_expenses: float | None = None
+    partner1_investments: float | None = None
+    partner2_income: float | None = None
+    partner2_expenses: float | None = None
+    partner2_investments: float | None = None
+    shared_goals: str | None = None
+    risk_preference: str | None = None
 
 
 @app.get("/")
@@ -79,7 +95,17 @@ def ask_ai(req: QueryRequest):
 
 @app.post("/feature/fire")
 def fire_planner(req: FireRequest):
-    return run_fire_feature(req.user_id, req.retirement_age)
+    return run_fire_feature(
+        req.user_id,
+        req.retirement_age,
+        {
+            "current_age": req.current_age,
+            "monthly_income": req.monthly_income,
+            "monthly_expenses": req.monthly_expenses,
+            "current_investments": req.current_investments,
+            "risk_level": req.risk_level,
+        },
+    )
 
 
 @app.post("/feature/tax")
@@ -89,12 +115,32 @@ def tax_wizard(req: TaxRequest):
 
 @app.post("/feature/life-event")
 def life_event(req: LifeEventRequest):
-    return run_life_event_feature(req.user_id, req.event)
+    return run_life_event_feature(
+        req.user_id,
+        req.event,
+        {
+            "annual_income": req.annual_income,
+            "monthly_expenses": req.monthly_expenses,
+            "bonus": req.bonus,
+        },
+    )
 
 
 @app.post("/feature/couple")
 def couple_planner(req: CoupleRequest):
-    return run_couple_feature(req.user_id)
+    return run_couple_feature(
+        req.user_id,
+        {
+            "partner1_income": req.partner1_income,
+            "partner1_expenses": req.partner1_expenses,
+            "partner1_investments": req.partner1_investments,
+            "partner2_income": req.partner2_income,
+            "partner2_expenses": req.partner2_expenses,
+            "partner2_investments": req.partner2_investments,
+            "shared_goals": req.shared_goals,
+            "risk_preference": req.risk_preference,
+        },
+    )
 
 
 @app.post("/feature/portfolio-xray")

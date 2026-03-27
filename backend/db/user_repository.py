@@ -12,19 +12,19 @@ def _default_user_data(user_id: int) -> Dict[str, Any]:
     return {
         "user_id": user_id,
         "income": {
-            "salary": 2400000,
-            "bonus": 200000,
+            "salary": 0,
+            "bonus": 0,
         },
         "expenses": {
-            "total": 50000,
+            "total": 0,
         },
         "goals": {
-            "retirement_age": 55,
+            "retirement_age": 60,
             "current_age": 30,
         },
         "investments": {
-            "current_corpus": 800000,
-            "monthly_investment": 20000,
+            "current_corpus": 0,
+            "monthly_investment": 0,
             "current_allocation": {
                 "equity": 0.65,
                 "debt": 0.30,
@@ -33,13 +33,13 @@ def _default_user_data(user_id: int) -> Dict[str, Any]:
         },
         "tax": {
             "deductions": {
-                "80C": 70000,
-                "80D": 10000,
+                "80C": 0,
+                "80D": 0,
             }
         },
         "partner": {
-            "salary": 1200000,
-            "deductions_80c": 50000,
+            "salary": 0,
+            "deductions_80c": 0,
         },
     }
 

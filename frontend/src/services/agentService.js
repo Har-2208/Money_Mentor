@@ -1,3 +1,5 @@
+import { getActiveUserId } from "./userIdentity";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 async function request(path, body, options = {}) {
@@ -27,25 +29,28 @@ async function request(path, body, options = {}) {
 }
 
 function normalizeUserId(userId) {
+  if (userId === undefined || userId === null) {
+    return getActiveUserId();
+  }
   const numericId = Number(userId);
   return Number.isInteger(numericId) && numericId > 0 ? numericId : 1;
 }
 
-async function askAI(query, userId = 1) {
+async function askAI(query, userId = null) {
   return request("/ask", {
     user_id: normalizeUserId(userId),
     query,
   });
 }
 
-async function getFirePlan(userId = 1, retirementAge) {
+async function getFirePlan(userId = null, retirementAge) {
   return request("/feature/fire", {
     user_id: normalizeUserId(userId),
     retirement_age: retirementAge ?? null,
   });
 }
 
-async function getTaxAnalysis(userId = 1, salary, deductions) {
+async function getTaxAnalysis(userId = null, salary, deductions) {
   return request("/feature/tax", {
     user_id: normalizeUserId(userId),
     salary: salary ?? null,
@@ -53,14 +58,14 @@ async function getTaxAnalysis(userId = 1, salary, deductions) {
   });
 }
 
-async function getLifeEventPlan(userId = 1, event) {
+async function getLifeEventPlan(userId = null, event) {
   return request("/feature/life-event", {
     user_id: normalizeUserId(userId),
     event,
   });
 }
 
-async function getCouplePlan(userId = 1) {
+async function getCouplePlan(userId = null) {
   return request("/feature/couple", {
     user_id: normalizeUserId(userId),
   });

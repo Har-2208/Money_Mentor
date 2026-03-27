@@ -6,6 +6,7 @@ import PortfolioAnalyzer from "./pages/PortfolioAnalyzer";
 import LifeEventPlanner from "./pages/LifeEventPlanner";
 import CouplePlanner from "./pages/CouplePlanner";
 import agentService from "./services/agentService";
+import { getActiveUserId } from "./services/userIdentity";
 
 const USERS_KEY = "amm_users";
 const SESSION_KEY = "amm_session";
@@ -1032,7 +1033,7 @@ function DashboardApp({ user, onLogout }) {
     desc: "",
     amount: "",
   });
-  const userId = 1;
+  const userId = getActiveUserId();
 
   useEffect(() => {
     if (showProfileModal) {

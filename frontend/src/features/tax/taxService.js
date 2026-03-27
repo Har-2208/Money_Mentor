@@ -1,6 +1,7 @@
 import axios from "axios";
+import { getActiveUserId } from "../../services/userIdentity";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -11,7 +12,16 @@ const apiClient = axios.create({
 
 async function calculateTax(formData) {
   try {
-    const response = await apiClient.post("/api/tax-calculate", formData);
+    const deductions = {
+      "80C": Number(formData?.deductions_80C || 0),
+      "80D": Number(formData?.deductions_80D || 0),
+      other: Number(formData?.other_deductions || 0),
+    };
+    const response = await apiClient.post("/feature/tax", {
+      user_id: getActiveUserId(),
+      salary: Number(formData?.annual_salary || 0),
+      deductions,
+    });
     return response.data;
   } catch (error) {
     const message =

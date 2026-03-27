@@ -1,20 +1,13 @@
 const state = {
-  monthlyBudget: 45000,
-  balance: 128500,
-  spent: 27850,
+  monthlyBudget: 0,
+  balance: 0,
+  spent: 0,
   goal: {
-    name: "Emergency Fund",
-    target: 200000,
-    saved: 105000,
+    name: "Primary Goal",
+    target: 0,
+    saved: 0,
   },
-  transactions: [
-    { desc: "Salary", category: "Income", amount: 85000 },
-    { desc: "Rent", category: "Bills", amount: -18000 },
-    { desc: "Groceries", category: "Food", amount: -4200 },
-    { desc: "Metro recharge", category: "Transport", amount: -1500 },
-    { desc: "Freelance payout", category: "Income", amount: 12500 },
-    { desc: "Pharmacy", category: "Health", amount: -1900 },
-  ],
+  transactions: [],
 };
 
 const USERS_KEY = "amm_users";

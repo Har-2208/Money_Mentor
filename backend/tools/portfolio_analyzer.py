@@ -59,15 +59,6 @@ def extract_transactions(text: str) -> List[Dict[str, Any]]:
             }
         )
 
-    if not transactions:
-        # Fallback sample transaction stream when parsing is sparse.
-        now = datetime.now()
-        transactions = [
-            {"date": datetime(now.year - 2, 1, 10), "amount": -120000, "scheme": default_scheme},
-            {"date": datetime(now.year - 1, 5, 10), "amount": -80000, "scheme": default_scheme},
-            {"date": datetime(now.year, 2, 10), "amount": 245000, "scheme": default_scheme},
-        ]
-
     return transactions
 
 
@@ -171,16 +162,36 @@ def run_portfolio_analysis(file_bytes: bytes) -> Dict[str, Any]:
     text = extract_pdf_text(file_bytes)
     transactions = extract_transactions(text)
 
+    if not transactions:
+        return {
+            "portfolio_analysis": {
+                "xirr": 0.0,
+                "overlap_matrix": {},
+                "overlap_score": 0.0,
+                "expense_drag": 0.0,
+                "rebalance_plan": ["No valid transactions could be parsed from the uploaded PDF."],
+                "rebalance_suggestions": ["Upload a detailed CAMS statement with transaction rows for accurate analysis."],
+            }
+        }
+
     xirr = calculate_xirr(transactions)
     overlap = overlap_matrix(transactions)
     drag = expense_drag(transactions)
     rebalance = rebalance_plan(transactions)
+    matrix_scores: List[float] = []
+    for fund_a, row in overlap.items():
+        for fund_b, score in row.items():
+            if fund_a != fund_b:
+                matrix_scores.append(float(score))
+    overlap_score = round(sum(matrix_scores) / len(matrix_scores), 2) if matrix_scores else 0.0
 
     return {
         "portfolio_analysis": {
             "xirr": xirr,
             "overlap_matrix": overlap,
+            "overlap_score": overlap_score,
             "expense_drag": drag,
             "rebalance_plan": rebalance,
+            "rebalance_suggestions": rebalance,
         }
     }
