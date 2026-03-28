@@ -130,6 +130,64 @@ function formatINR(value) {
   return `INR ${Math.round(value).toLocaleString("en-IN")}`;
 }
 
+const AUTO_DETECT_EXPENSE_CATEGORY = "Auto Detect";
+
+const EXPENSE_CATEGORIES = [
+  "Food",
+  "Travel",
+  "Housing",
+  "Utilities",
+  "Healthcare",
+  "Shopping",
+  "Entertainment",
+  "Education",
+  "Insurance",
+  "Debt/EMI",
+  "Family",
+  "Personal Care",
+  "Subscriptions",
+  "Investments",
+  "Other",
+];
+
+const INCOME_CATEGORIES = [
+  "Salary",
+  "Bonus",
+  "Freelance",
+  "Business",
+  "Investment Income",
+  "Interest",
+  "Rental Income",
+  "Gift",
+  "Refund",
+  "Other Income",
+];
+
+function classifyExpenseCategory(description) {
+  const text = (description || "").toLowerCase();
+
+  const rules = [
+    { name: "Food", keywords: ["food", "grocery", "groceries", "restaurant", "swiggy", "zomato", "dining"] },
+    { name: "Travel", keywords: ["travel", "uber", "ola", "fuel", "petrol", "diesel", "cab", "metro", "bus", "train", "flight", "taxi"] },
+    { name: "Housing", keywords: ["rent", "maintenance", "society", "housing"] },
+    { name: "Utilities", keywords: ["electricity", "water", "internet", "wifi", "mobile", "recharge", "gas", "utility"] },
+    { name: "Healthcare", keywords: ["health", "hospital", "medical", "medicine", "doctor", "pharmacy"] },
+    { name: "Shopping", keywords: ["shopping", "amazon", "flipkart", "clothes", "apparel", "electronics"] },
+    { name: "Entertainment", keywords: ["movie", "netflix", "spotify", "entertainment", "game", "concert"] },
+    { name: "Education", keywords: ["course", "education", "tuition", "books", "exam", "school", "college"] },
+    { name: "Insurance", keywords: ["insurance", "premium"] },
+    { name: "Debt/EMI", keywords: ["emi", "loan", "debt", "repayment"] },
+  ];
+
+  for (const rule of rules) {
+    if (rule.keywords.some((keyword) => text.includes(keyword))) {
+      return rule.name;
+    }
+  }
+
+  return "Other";
+}
+
 function cleanAgentLine(line) {
   if (!line) return "";
   return line
@@ -1109,6 +1167,7 @@ function DashboardApp({ user, onLogout }) {
   });
   const [txnForm, setTxnForm] = useState({
     type: "Debit",
+    category: AUTO_DETECT_EXPENSE_CATEGORY,
     desc: "",
     amount: "",
   });
@@ -1599,7 +1658,12 @@ function DashboardApp({ user, onLogout }) {
     if (!txnForm.desc.trim() || amountRaw <= 0) return;
 
     const signed = txnForm.type === "Credit" ? amountRaw : -amountRaw;
-    const autoCategory = txnForm.type === "Credit" ? "Income" : "Expense";
+    const selectedCategory =
+      txnForm.type === "Credit"
+        ? txnForm.category || "Salary"
+        : txnForm.category === AUTO_DETECT_EXPENSE_CATEGORY
+          ? classifyExpenseCategory(txnForm.desc)
+          : txnForm.category || "Other";
 
     setFinance((prev) => ({
       ...prev,
@@ -1608,7 +1672,7 @@ function DashboardApp({ user, onLogout }) {
       spent: signed < 0 ? prev.spent + Math.abs(signed) : prev.spent,
       transactions: [
         ...prev.transactions,
-        { desc: txnForm.desc.trim(), category: autoCategory, amount: signed },
+        { desc: txnForm.desc.trim(), category: selectedCategory, amount: signed },
       ],
     }));
 
@@ -1619,7 +1683,15 @@ function DashboardApp({ user, onLogout }) {
         "Future AI recommendations are now updated with this transaction.",
     });
 
-    setTxnForm({ type: "Debit", desc: "", amount: "" });
+    setTxnForm({
+      type: txnForm.type,
+      category:
+        txnForm.type === "Credit"
+          ? txnForm.category || "Salary"
+          : AUTO_DETECT_EXPENSE_CATEGORY,
+      desc: "",
+      amount: "",
+    });
   };
 
   const deleteTransaction = (txIndex) => {
@@ -1689,6 +1761,16 @@ function DashboardApp({ user, onLogout }) {
   ];
 
   const donutTotal = categoryTotals.reduce((sum, x) => sum + x[1], 0);
+  const maxExpenseCategory = useMemo(() => {
+    if (!categoryTotals.length) return null;
+    const [name, amount] = categoryTotals[0];
+    const sharePct = donutTotal > 0 ? (amount / donutTotal) * 100 : 0;
+    return {
+      name,
+      amount,
+      sharePct,
+    };
+  }, [categoryTotals, donutTotal]);
   const donutColors = ["#007a78", "#e76f36", "#0ea5a2", "#f59e0b", "#2f4858"];
 
   return (
@@ -2157,6 +2239,15 @@ function DashboardApp({ user, onLogout }) {
               <div className="grid chart-grid">
                 <article className="card category-split-card">
                   <p className="card-label">Category Split</p>
+                  {maxExpenseCategory ? (
+                    <p className="section-hint">
+                      Highest spend category: <strong>{maxExpenseCategory.name}</strong> ({formatINR(maxExpenseCategory.amount)}, {maxExpenseCategory.sharePct.toFixed(1)}%).
+                    </p>
+                  ) : (
+                    <p className="section-hint">
+                      Add debit transactions to see category-wise expense distribution.
+                    </p>
+                  )}
                   <svg
                     className="chart-svg category-split-svg"
                     viewBox="0 0 320 230"
@@ -2488,11 +2579,43 @@ function DashboardApp({ user, onLogout }) {
                       <select
                         value={txnForm.type}
                         onChange={(e) =>
-                          setTxnForm((p) => ({ ...p, type: e.target.value }))
+                          setTxnForm((p) => ({
+                            ...p,
+                            type: e.target.value,
+                            category:
+                              e.target.value === "Credit"
+                                ? "Salary"
+                                : AUTO_DETECT_EXPENSE_CATEGORY,
+                          }))
                         }
                       >
                         <option>Debit</option>
                         <option>Credit</option>
+                      </select>
+                    </label>
+                    <label>
+                      Category
+                      <select
+                        value={txnForm.category}
+                        onChange={(e) =>
+                          setTxnForm((p) => ({ ...p, category: e.target.value }))
+                        }
+                      >
+                        {txnForm.type === "Credit" ? (
+                          INCOME_CATEGORIES.map((category) => (
+                            <option key={category} value={category}>
+                              {category}
+                            </option>
+                          ))
+                        ) : (
+                          [AUTO_DETECT_EXPENSE_CATEGORY, ...EXPENSE_CATEGORIES].map(
+                            (category) => (
+                              <option key={category} value={category}>
+                                {category}
+                              </option>
+                            ),
+                          )
+                        )}
                       </select>
                     </label>
                     <label>
