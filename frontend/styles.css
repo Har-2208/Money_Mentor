@@ -2461,9 +2461,20 @@ p {
 }
 
 .category-split-card {
-  max-width: 560px;
+  max-width: 100%;
   padding: 14px;
   gap: 10px;
+}
+
+.category-split-layout {
+  grid-template-columns: minmax(320px, 1.2fr) minmax(260px, 0.8fr);
+  align-items: start;
+}
+
+.spending-patterns-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(16, 34, 45, 0.1);
+  box-shadow: none;
 }
 
 .category-split-svg {
@@ -3049,6 +3060,10 @@ button:hover {
   .chat-layout,
   .two-up,
   .three-up {
+    grid-template-columns: 1fr;
+  }
+
+  .category-split-layout {
     grid-template-columns: 1fr;
   }
 }

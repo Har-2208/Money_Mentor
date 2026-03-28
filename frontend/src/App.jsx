@@ -1154,13 +1154,6 @@ function DashboardApp({ user, onLogout }) {
   ]);
   const [chatPending, setChatPending] = useState(false);
   const [chatError, setChatError] = useState("");
-  const [agentInsights, setAgentInsights] = useState({
-    tax: null,
-    fire: null,
-    lifeEvent: null,
-    couple: null,
-  });
-  const [insightsLoading, setInsightsLoading] = useState(false);
   const [notification, setNotification] = useState({
     type: "good",
     text: "You are within healthy budget range.",
@@ -1197,55 +1190,6 @@ function DashboardApp({ user, onLogout }) {
       };
     });
   }, [profileData]);
-
-  useEffect(() => {
-    if (activeScreen !== "insights") {
-      return;
-    }
-
-    const loadInsights = async () => {
-      setInsightsLoading(true);
-      try {
-        const salary =
-          toNumber(profileData.income.baseSalary) +
-          toNumber(profileData.income.otherIncome) * 12;
-        const deductions = {
-          "80C": Math.max(0, toNumber(profileData.assets.ppf)),
-          "80D": Math.max(0, toNumber(profileData.insurance.healthInsurance)),
-        };
-
-        const [tax, fire, lifeEvent, couple] = await Promise.all([
-          agentService.getTaxAnalysis(userId, salary || null, deductions),
-          agentService.getFirePlan(
-            userId,
-            toNumber(profileData.goals?.[0]?.years)
-              ? toNumber(profileData.personalInfo.age) +
-                  toNumber(profileData.goals[0].years)
-              : null,
-          ),
-          agentService.getLifeEventPlan(
-            userId,
-            "Annual financial planning review",
-            false,
-          ),
-          agentService.getCouplePlan(userId, false),
-        ]);
-
-        setAgentInsights({ tax, fire, lifeEvent, couple });
-      } catch {
-        setAgentInsights({
-          tax: null,
-          fire: null,
-          lifeEvent: null,
-          couple: null,
-        });
-      } finally {
-        setInsightsLoading(false);
-      }
-    };
-
-    loadInsights();
-  }, [activeScreen, profileData, userId]);
 
   // Calculate profile completion percentage
   const profileCompletion = useMemo(() => {
@@ -1869,7 +1813,7 @@ function DashboardApp({ user, onLogout }) {
 
       <main className="app-shell">
         <nav className="side-nav glass" aria-label="Primary">
-          {["dashboard", "chat", "insights", "goals", "transactions"].map(
+          {["dashboard", "chat", "goals", "transactions"].map(
             (screen) => (
               <button
                 key={screen}
@@ -1897,6 +1841,13 @@ function DashboardApp({ user, onLogout }) {
           <Link to="/couple-planner" className="nav-btn">
             Couple Planner
           </Link>
+          <button
+            type="button"
+            className={`nav-btn ${activeScreen === "guide" ? "active" : ""}`}
+            onClick={() => setActiveScreen("guide")}
+          >
+            Website Guide
+          </button>
         </nav>
 
         <section className="content-column">
@@ -2248,85 +2199,114 @@ function DashboardApp({ user, onLogout }) {
                       Add debit transactions to see category-wise expense distribution.
                     </p>
                   )}
-                  <svg
-                    className="chart-svg category-split-svg"
-                    viewBox="0 0 320 230"
-                  >
-                    {donutTotal > 0 ? (
-                      <>
-                        {(() => {
-                          let acc = 0;
-                          const cx = 95;
-                          const cy = 115;
-                          const radius = 62;
-                          const stroke = 28;
-                          const c = 2 * Math.PI * radius;
-                          return categoryTotals
-                            .slice(0, 5)
-                            .map(([cat, amount], i) => {
-                              const share = amount / donutTotal;
-                              const len = c * share;
-                              const dash = `${len.toFixed(2)} ${(c - len).toFixed(2)}`;
-                              const offset = (-acc * c).toFixed(2);
-                              acc += share;
-                              const y = 54 + i * 30;
-                              return (
-                                <g key={cat}>
-                                  <circle
-                                    cx={cx}
-                                    cy={cy}
-                                    r={radius}
-                                    fill="none"
-                                    stroke={donutColors[i % donutColors.length]}
-                                    strokeWidth={stroke}
-                                    strokeDasharray={dash}
-                                    strokeDashoffset={offset}
-                                    transform={`rotate(-90 ${cx} ${cy})`}
-                                  />
-                                  <rect
-                                    x="188"
-                                    y={y - 10}
-                                    width="10"
-                                    height="10"
-                                    fill={donutColors[i % donutColors.length]}
-                                    rx="2"
-                                  />
-                                  <text x="204" y={y} className="chart-muted">
-                                    {cat}
-                                  </text>
-                                </g>
-                              );
-                            });
-                        })()}
-                        <circle
-                          cx="95"
-                          cy="115"
-                          r="38"
-                          fill="rgba(255,255,255,0.95)"
-                        />
-                        <text
-                          x="95"
-                          y="112"
-                          textAnchor="middle"
-                          className="chart-caption"
-                        >
-                          {formatINR(donutTotal)}
+                  <div className="grid two-up category-split-layout">
+                    <svg
+                      className="chart-svg category-split-svg"
+                      viewBox="0 0 320 230"
+                    >
+                      {donutTotal > 0 ? (
+                        <>
+                          {(() => {
+                            let acc = 0;
+                            const cx = 95;
+                            const cy = 115;
+                            const radius = 62;
+                            const stroke = 28;
+                            const c = 2 * Math.PI * radius;
+                            return categoryTotals
+                              .slice(0, 5)
+                              .map(([cat, amount], i) => {
+                                const share = amount / donutTotal;
+                                const len = c * share;
+                                const dash = `${len.toFixed(2)} ${(c - len).toFixed(2)}`;
+                                const offset = (-acc * c).toFixed(2);
+                                acc += share;
+                                const y = 54 + i * 30;
+                                return (
+                                  <g key={cat}>
+                                    <circle
+                                      cx={cx}
+                                      cy={cy}
+                                      r={radius}
+                                      fill="none"
+                                      stroke={donutColors[i % donutColors.length]}
+                                      strokeWidth={stroke}
+                                      strokeDasharray={dash}
+                                      strokeDashoffset={offset}
+                                      transform={`rotate(-90 ${cx} ${cy})`}
+                                    />
+                                    <rect
+                                      x="188"
+                                      y={y - 10}
+                                      width="10"
+                                      height="10"
+                                      fill={donutColors[i % donutColors.length]}
+                                      rx="2"
+                                    />
+                                    <text x="204" y={y} className="chart-muted">
+                                      {cat}
+                                    </text>
+                                  </g>
+                                );
+                              });
+                          })()}
+                          <circle
+                            cx="95"
+                            cy="115"
+                            r="38"
+                            fill="rgba(255,255,255,0.95)"
+                          />
+                          <text
+                            x="95"
+                            y="112"
+                            textAnchor="middle"
+                            className="chart-caption"
+                          >
+                            {formatINR(donutTotal)}
+                          </text>
+                          <text
+                            x="95"
+                            y="128"
+                            textAnchor="middle"
+                            className="chart-muted"
+                          >
+                            total spent
+                          </text>
+                        </>
+                      ) : (
+                        <text x="20" y="30" className="chart-caption">
+                          No spending data yet.
                         </text>
-                        <text
-                          x="95"
-                          y="128"
-                          textAnchor="middle"
-                          className="chart-muted"
-                        >
-                          total spent
-                        </text>
-                      </>
-                    ) : (
-                      <text x="20" y="30" className="chart-caption">
-                        No spending data yet.
-                      </text>
-                    )}
-                  </svg>
+                      )}
+                    </svg>
+
+                    <article className="card spending-patterns-card">
+                      <p className="card-label">Spending Patterns</p>
+                      <div className="stack">
+                        {categoryTotals.length > 0 ? (
+                          categoryTotals.slice(0, 5).map(([cat, amount], i) => (
+                            <div key={cat} className="txn-item">
+                              <strong>
+                                Pattern {i + 1}: {cat}
+                              </strong>
+                              <br />
+                              <small>
+                                {formatINR(amount)} spent so far this month
+                              </small>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="txn-item">
+                            <strong>No Patterns Yet</strong>
+                            <br />
+                            <small>
+                              Add debit transactions to generate spending patterns.
+                            </small>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  </div>
                 </article>
               </div>
             </section>
@@ -2419,112 +2399,6 @@ function DashboardApp({ user, onLogout }) {
                     </div>
                   </aside>
                 </div>
-              </div>
-            </section>
-          )}
-
-          {activeScreen === "insights" && (
-            <section className="screen active-screen">
-              <div className="grid two-up">
-                <article className="card">
-                  <p className="card-label">Spending Patterns</p>
-                  <div className="stack">
-                    {categoryTotals.slice(0, 5).map(([cat, amount], i) => (
-                      <div key={cat} className="txn-item">
-                        <strong>
-                          Pattern {i + 1}: {cat}
-                        </strong>
-                        <br />
-                        <small>
-                          {formatINR(amount)} spent so far this month
-                        </small>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-                <article className="card">
-                  <p className="card-label">Agent Recommendations</p>
-                  <div className="stack">
-                    {insightsLoading && (
-                      <div className="txn-item">
-                        <strong>Loading</strong>
-                        <br />
-                        <small>
-                          Fetching latest recommendations from backend agents...
-                        </small>
-                      </div>
-                    )}
-                    {!insightsLoading && agentInsights.tax?.tax_analysis && (
-                      <div className="txn-item">
-                        <strong>Tax Wizard</strong>
-                        <br />
-                        <small>
-                          Best regime:{" "}
-                          {agentInsights.tax.tax_analysis.best_option}. Missing
-                          deductions:{" "}
-                          {(
-                            agentInsights.tax.tax_analysis.missing_deductions ||
-                            []
-                          ).join(", ") || "none"}
-                          .
-                        </small>
-                      </div>
-                    )}
-                    {!insightsLoading && agentInsights.fire?.fire_plan && (
-                      <div className="txn-item">
-                        <strong>FIRE Planner</strong>
-                        <br />
-                        <small>
-                          Monthly SIP target:{" "}
-                          {formatINR(agentInsights.fire.fire_plan.monthly_sip)}.
-                          Years to retire:{" "}
-                          {agentInsights.fire.fire_plan.timeline
-                            ?.years_to_retire ?? "-"}
-                          .
-                        </small>
-                      </div>
-                    )}
-                    {!insightsLoading &&
-                      agentInsights.lifeEvent?.life_event_plan && (
-                        <div className="txn-item">
-                          <strong>Life Event Planner</strong>
-                          <br />
-                          <small>
-                            {agentInsights.lifeEvent.life_event_plan
-                              .suggestions?.[0] ||
-                              "Life event strategy is available."}
-                          </small>
-                        </div>
-                      )}
-                    {!insightsLoading && agentInsights.couple?.couple_plan && (
-                      <div className="txn-item">
-                        <strong>Couple Planner</strong>
-                        <br />
-                        <small>
-                          Combined income estimate:{" "}
-                          {formatINR(
-                            agentInsights.couple.couple_plan.combined_income,
-                          )}
-                          .
-                        </small>
-                      </div>
-                    )}
-                    {!insightsLoading &&
-                      !agentInsights.tax &&
-                      !agentInsights.fire &&
-                      !agentInsights.lifeEvent &&
-                      !agentInsights.couple && (
-                        <div className="txn-item">
-                          <strong>No Data</strong>
-                          <br />
-                          <small>
-                            Unable to fetch endpoint-driven insights at the
-                            moment.
-                          </small>
-                        </div>
-                      )}
-                  </div>
-                </article>
               </div>
             </section>
           )}
@@ -2681,6 +2555,217 @@ function DashboardApp({ user, onLogout }) {
                         </div>
                       ))}
                   </div>
+                </article>
+              </div>
+            </section>
+          )}
+
+          {activeScreen === "guide" && (
+            <section className="screen active-screen guide-section">
+              <div className="grid">
+                <article className="card">
+                  <p className="card-label">New User Guide</p>
+                  <h2>How To Use AI Money Mentor Effectively</h2>
+                  <p>
+                    This guide helps you understand each section of the
+                    platform and how to use them together for better financial
+                    planning decisions.
+                  </p>
+                </article>
+
+                <div className="grid two-up">
+                  <article className="card">
+                    <p className="card-label">Step 1</p>
+                    <h3>Complete Profile First</h3>
+                    <p>
+                      Start by filling your profile thoroughly from Personal
+                      Info through Risk Profile. Better profile quality leads to
+                      better alerts, score quality, and AI guidance.
+                    </p>
+                    <div className="stack">
+                      <div className="txn-item">
+                        <strong>What to enter carefully</strong>
+                        <br />
+                        <small>
+                          Income, monthly expenses, liabilities, insurance,
+                          target goals, and timeline.
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>Why this matters</strong>
+                        <br />
+                        <small>
+                          Most dashboard insights and AI context rely on this
+                          data.
+                        </small>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="card">
+                    <p className="card-label">Step 2</p>
+                    <h3>Use Dashboard As Daily Control Panel</h3>
+                    <p>
+                      The Dashboard is your high-level health check. Use it to
+                      quickly monitor spending pressure, cash flow, and category
+                      concentration.
+                    </p>
+                    <div className="stack">
+                      <div className="txn-item">
+                        <strong>Money Health Score</strong>
+                        <br />
+                        <small>
+                          Weighted indicator across emergency fund, insurance,
+                          debt, investments, tax planning, and retirement.
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>Monthly Cash Flow</strong>
+                        <br />
+                        <small>
+                          Tracks income vs planned monthly expenses and savings
+                          rate.
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>Category Split</strong>
+                        <br />
+                        <small>
+                          Shows where your debit spending is concentrated and
+                          highlights your top expense category.
+                        </small>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+
+                <div className="grid two-up">
+                  <article className="card">
+                    <p className="card-label">Step 3</p>
+                    <h3>Act On Smart Alerts</h3>
+                    <p>
+                      Smart Alerts are trigger-based signals for overspending,
+                      tax opportunities, emergency fund gaps, and debt burden.
+                    </p>
+                    <div className="stack">
+                      <div className="txn-item">
+                        <strong>Action buttons are AI-powered</strong>
+                        <br />
+                        <small>
+                          Clicking an alert action opens AI Mentor and starts a
+                          focused follow-up discussion automatically.
+                        </small>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="card">
+                    <p className="card-label">Step 4</p>
+                    <h3>Keep Transactions Updated</h3>
+                    <p>
+                      Add every major debit/credit transaction regularly. The
+                      app auto-classifies debit entries into useful categories
+                      such as Food, Travel, Utilities, Healthcare, and more.
+                    </p>
+                    <div className="stack">
+                      <div className="txn-item">
+                        <strong>Best practice</strong>
+                        <br />
+                        <small>
+                          Log transactions weekly to keep dashboard trends,
+                          category split, and alerts accurate.
+                        </small>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+
+                <div className="grid two-up">
+                  <article className="card">
+                    <p className="card-label">Planning Modules</p>
+                    <h3>When To Use Which Tool</h3>
+                    <div className="stack">
+                      <div className="txn-item">
+                        <strong>Tax Wizard</strong>
+                        <br />
+                        <small>
+                          Use before year-end to compare regimes and close
+                          deduction gaps.
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>FIRE Planner</strong>
+                        <br />
+                        <small>
+                          Use for long-term retirement corpus and SIP planning.
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>Portfolio X-Ray</strong>
+                        <br />
+                        <small>
+                          Use to inspect portfolio quality, overlap, and return
+                          efficiency.
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>Life Event Advisor</strong>
+                        <br />
+                        <small>
+                          Use during marriage, relocation, bonus, new child, or
+                          any major expense phase.
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>Couple Planner</strong>
+                        <br />
+                        <small>
+                          Use for shared goals, role-wise contributions, and
+                          combined planning strategy.
+                        </small>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="card">
+                    <p className="card-label">AI Mentor Usage</p>
+                    <h3>How To Ask Better Questions</h3>
+                    <div className="stack">
+                      <div className="txn-item">
+                        <strong>Be specific</strong>
+                        <br />
+                        <small>
+                          Example: "I have INR 30,000 monthly surplus. Should I
+                          split between debt payoff and ELSS?"
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>Ask scenario-based follow-ups</strong>
+                        <br />
+                        <small>
+                          Example: "What changes if my rent increases by 20%?"
+                        </small>
+                      </div>
+                      <div className="txn-item">
+                        <strong>Use iterative planning</strong>
+                        <br />
+                        <small>
+                          Ask for monthly action plans, then revise based on new
+                          transactions and life changes.
+                        </small>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+
+                <article className="card">
+                  <p className="card-label">Recommended Workflow</p>
+                  <p>
+                    Complete profile → record transactions weekly → monitor
+                    dashboard alerts → open AI Mentor from alerts for detailed
+                    action → validate strategy in relevant planner modules.
+                    Repeat monthly for best outcomes.
+                  </p>
                 </article>
               </div>
             </section>
