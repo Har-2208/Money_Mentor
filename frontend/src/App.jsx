@@ -68,7 +68,8 @@ function buildFinanceFromProfile(profile) {
     toNumber(profile.expenses.food) +
     toNumber(profile.expenses.travel) +
     toNumber(profile.expenses.subscriptions) +
-    toNumber(profile.expenses.misc);
+    toNumber(profile.expenses.misc) +
+    toNumber(profile.liabilities.emi);
 
   const savings = toNumber(profile.assets.cash) + toNumber(profile.assets.fd);
   const investments =
@@ -78,7 +79,6 @@ function buildFinanceFromProfile(profile) {
 
   const debt =
     toNumber(profile.liabilities.homeLoan) +
-    toNumber(profile.liabilities.emi) +
     toNumber(profile.liabilities.creditCardDues);
 
   const primaryGoal = profile.goals?.[0] || {
@@ -86,11 +86,12 @@ function buildFinanceFromProfile(profile) {
     targetAmount: 0,
   };
   const targetGoalAmount = toNumber(primaryGoal.targetAmount);
+  const monthlyBudget = monthlyIncome > 0 ? monthlyIncome : monthlyExpenses;
 
   return {
-    monthlyBudget: monthlyExpenses,
+    monthlyBudget: Math.max(monthlyBudget, 0),
     balance: Math.max(savings, 0),
-    spent: monthlyExpenses,
+    spent: Math.max(monthlyExpenses, 0),
     income: Math.max(monthlyIncome, 0),
     expenses: Math.max(monthlyExpenses, 0),
     goal: {
@@ -106,7 +107,7 @@ function buildFinanceFromProfile(profile) {
     },
     liabilities: {
       homeLoan: toNumber(profile.liabilities.homeLoan),
-      personalLoan: toNumber(profile.liabilities.emi),
+      personalLoan: 0,
       creditCard: toNumber(profile.liabilities.creditCardDues),
     },
     insurance: {
@@ -1120,10 +1121,22 @@ function DashboardApp({ user, onLogout }) {
   }, [showProfileModal]);
 
   useEffect(() => {
-    setFinance((prev) => ({
-      ...buildFinanceFromProfile(profileData),
-      transactions: prev.transactions,
-    }));
+    setFinance((prev) => {
+      const base = buildFinanceFromProfile(profileData);
+      const txns = prev.transactions || [];
+      const netTxnAmount = txns.reduce((sum, txn) => sum + toNumber(txn.amount), 0);
+      const debitTxnTotal = txns.reduce(
+        (sum, txn) => (toNumber(txn.amount) < 0 ? sum + Math.abs(toNumber(txn.amount)) : sum),
+        0,
+      );
+
+      return {
+        ...base,
+        balance: Math.max(base.balance + netTxnAmount, 0),
+        spent: Math.max(base.expenses + debitTxnTotal, 0),
+        transactions: txns,
+      };
+    });
   }, [profileData]);
 
   useEffect(() => {
@@ -1296,73 +1309,69 @@ function DashboardApp({ user, onLogout }) {
       return { available: false, total: 0, breakdown: emptyBreakdown };
     }
 
-    let score = 0;
-    const scores = {};
-
-    // Emergency Fund: 0-20 points
-    scores.emergencyFund =
-      finance.emergencyFundTarget > 0
-        ? Math.min(20, (finance.emergencyFund / finance.emergencyFundTarget) * 20)
-        : 0;
-
-    // Insurance: 0-15 points
-    scores.insurance =
-      finance.insurance.health && finance.insurance.life
-        ? 15
-        : finance.insurance.health || finance.insurance.life
-          ? 10
-          : 0;
-
-    // Debt: 0-15 points (lower debt = higher score)
+    const annualIncome = Math.max(0, (finance.income || 0) * 12);
     const totalDebt =
       finance.liabilities.homeLoan +
       finance.liabilities.personalLoan +
       finance.liabilities.creditCard;
-    scores.debt = Math.max(0, 15 - (totalDebt / 500000) * 15);
 
-    // Investment: 0-20 points
-    scores.investment = Math.min(
-      20,
-      (finance.assets.investments / 500000) * 20,
-    );
+    const scores = {
+      emergencyFund:
+        finance.emergencyFundTarget > 0
+          ? Math.max(
+              0,
+              Math.min(
+                100,
+                (finance.emergencyFund / finance.emergencyFundTarget) * 100,
+              ),
+            )
+          : 0,
+      insurance:
+        finance.insurance.health && finance.insurance.life
+          ? 100
+          : finance.insurance.health || finance.insurance.life
+            ? 60
+            : 0,
+      debt:
+        totalDebt <= 0
+          ? 100
+          : annualIncome > 0
+            ? Math.max(0, Math.min(100, 100 - (totalDebt / annualIncome) * 100))
+            : 0,
+      investment: Math.max(
+        0,
+        Math.min(100, (finance.assets.investments / 500000) * 100),
+      ),
+      tax: 0,
+      retirement: Math.max(0, Math.min(100, (finance.retirement / 500000) * 100)),
+    };
 
-    // Tax Planning: 0-15 points
     const declaredTaxSavings =
       toNumber(profileData.assets.ppf) +
       toNumber(profileData.insurance.healthInsurance);
-    scores.tax = Math.min(15, (declaredTaxSavings / 150000) * 15);
+    scores.tax = Math.max(0, Math.min(100, (declaredTaxSavings / 150000) * 100));
 
-    // Retirement: 0-15 points
-    scores.retirement = Math.min(15, (finance.retirement / 500000) * 15);
+    const weightedScore =
+      scores.emergencyFund * 0.2 +
+      scores.insurance * 0.15 +
+      scores.debt * 0.15 +
+      scores.investment * 0.2 +
+      scores.tax * 0.15 +
+      scores.retirement * 0.15;
 
-    score = Object.values(scores).reduce((a, b) => a + b, 0);
-    return { available: true, total: Math.round(score), breakdown: scores };
-  }, [finance, hasMoneyHealthInputs, profileData]);
-
-  // Net Worth Calculation
-  const netWorth = useMemo(() => {
-    const totalAssets =
-      (finance.assets.savings || 0) +
-      (finance.assets.investments || 0) +
-      (finance.assets.realEstate || 0) +
-      (finance.assets.otherAssets || 0);
-    const totalLiabilities =
-      (finance.liabilities.homeLoan || 0) +
-      (finance.liabilities.personalLoan || 0) +
-      (finance.liabilities.creditCard || 0);
     return {
-      assets: totalAssets,
-      liabilities: totalLiabilities,
-      netWorth: totalAssets - totalLiabilities,
+      available: true,
+      total: Math.round(weightedScore),
+      breakdown: scores,
     };
-  }, [finance]);
+  }, [finance, hasMoneyHealthInputs, profileData]);
 
   // Monthly Cash Flow
   const cashFlow = useMemo(() => {
     return {
       income: finance.income || 0,
-      expenses: finance.spent || 0,
-      surplus: (finance.income || 0) - (finance.spent || 0),
+      expenses: finance.expenses || 0,
+      surplus: (finance.income || 0) - (finance.expenses || 0),
     };
   }, [finance]);
 
@@ -1373,28 +1382,37 @@ function DashboardApp({ user, onLogout }) {
     // Overspending alert
     if (finance.spent > finance.monthlyBudget * 0.8) {
       alertList.push({
+        id: "overspending",
         type: "warn",
-        message: `You are overspending! ${finance.spent} of ${finance.monthlyBudget} budget used.`,
+        message: `You are overspending! ${formatINR(finance.spent)} of ${formatINR(finance.monthlyBudget)} budget used.`,
         action: "Review expenses",
+        prompt:
+          "I am overspending against my monthly budget. Analyze my situation and give me a concrete expense reduction plan for the next 30 days with priorities and cut suggestions.",
       });
     }
 
     // Tax saving opportunity
     if (profileData.income.baseSalary > 0 && finance.taxSavings === 0) {
       alertList.push({
+        id: "tax-saving",
         type: "info",
         message:
           "Tax saving opportunity detected! Invest in PPF or ELSS for 80C deduction.",
         action: "Learn more",
+        prompt:
+          "Help me optimize tax savings based on my profile. Explain what I should do under 80C and 80D first, how much to allocate, and what order I should follow this year.",
       });
     }
 
     // Emergency fund alert
     if (finance.emergencyFund < finance.emergencyFundTarget * 0.5) {
       alertList.push({
+        id: "emergency-fund",
         type: "info",
         message: `Emergency fund is low. Target: ${formatINR(finance.emergencyFundTarget)}`,
         action: "Increase fund",
+        prompt:
+          "My emergency fund is below target. Build me a step-by-step emergency fund catch-up plan with monthly contribution targets and what expenses to prioritize.",
       });
     }
 
@@ -1404,10 +1422,19 @@ function DashboardApp({ user, onLogout }) {
       finance.liabilities.personalLoan +
       finance.liabilities.creditCard;
     if (totalDebt > 0) {
+      const annualIncome = Math.max(0, finance.income * 12);
+      const debtToIncomeRatio =
+        annualIncome > 0 ? totalDebt / annualIncome : null;
       alertList.push({
+        id: "debt",
         type: "warn",
-        message: `You have ${formatINR(totalDebt)} in outstanding debt.`,
+        message:
+          debtToIncomeRatio !== null
+            ? `You have ${formatINR(totalDebt)} in outstanding debt (Debt-to-income: ${debtToIncomeRatio.toFixed(2)}x).`
+            : `You have ${formatINR(totalDebt)} in outstanding debt.`,
         action: "Payoff plan",
+        prompt:
+          "Create a debt payoff plan for me from current liabilities. Suggest repayment priority, monthly amount split, and timeline options while maintaining minimum emergency liquidity.",
       });
     }
 
@@ -1559,6 +1586,13 @@ function DashboardApp({ user, onLogout }) {
     await sendChatQuery(value);
   };
 
+  const handleAlertAction = async (alert) => {
+    if (!alert?.prompt || chatPending) return;
+    setActiveScreen("chat");
+    appendUser(alert.prompt);
+    await sendChatQuery(alert.prompt);
+  };
+
   const addTransaction = (event) => {
     event.preventDefault();
     const amountRaw = Number(txnForm.amount);
@@ -1586,6 +1620,38 @@ function DashboardApp({ user, onLogout }) {
     });
 
     setTxnForm({ type: "Debit", desc: "", amount: "" });
+  };
+
+  const deleteTransaction = (txIndex) => {
+    setFinance((prev) => {
+      const tx = prev.transactions[txIndex];
+      if (!tx) return prev;
+
+      const updatedTransactions = prev.transactions.filter((_, i) => i !== txIndex);
+
+      // Roll back the transaction impact from totals when deleting.
+      const nextBalance =
+        tx.amount >= 0
+          ? prev.balance - tx.amount
+          : prev.balance + Math.abs(tx.amount);
+      const nextSpent =
+        tx.amount < 0
+          ? Math.max(0, prev.spent - Math.abs(tx.amount))
+          : prev.spent;
+
+      return {
+        ...prev,
+        balance: Math.max(0, nextBalance),
+        spent: nextSpent,
+        transactions: updatedTransactions,
+      };
+    });
+
+    appendAI({
+      answer: "Transaction deleted.",
+      reasoning: "The selected transaction has been removed from your records.",
+      impact: "Budget usage and balance have been recalculated.",
+    });
   };
 
   const profileSections = [
@@ -1622,7 +1688,6 @@ function DashboardApp({ user, onLogout }) {
     "What should I prioritize this month: debt, emergency fund, or investing?",
   ];
 
-  const topCategory = categoryTotals[0]?.[0] || "Spending";
   const donutTotal = categoryTotals.reduce((sum, x) => sum + x[1], 0);
   const donutColors = ["#007a78", "#e76f36", "#0ea5a2", "#f59e0b", "#2f4858"];
 
@@ -1868,7 +1933,12 @@ function DashboardApp({ user, onLogout }) {
                       >
                         <div className="alert-content">
                           <p className="alert-message">{alert.message}</p>
-                          <button className="alert-action">
+                          <button
+                            type="button"
+                            className="alert-action"
+                            onClick={() => handleAlertAction(alert)}
+                            disabled={chatPending}
+                          >
                             {alert.action}
                           </button>
                         </div>
@@ -1970,7 +2040,7 @@ function DashboardApp({ user, onLogout }) {
                           <div
                             className="mini-bar"
                             style={{
-                              width: `${Math.min(100, moneyHealthScore.breakdown.emergencyFund * 5)}%`,
+                              width: `${Math.min(100, moneyHealthScore.breakdown.emergencyFund)}%`,
                             }}
                           ></div>
                           <span className="health-value">
@@ -1983,7 +2053,7 @@ function DashboardApp({ user, onLogout }) {
                           <div
                             className="mini-bar"
                             style={{
-                              width: `${Math.min(100, moneyHealthScore.breakdown.insurance * 6.67)}%`,
+                              width: `${Math.min(100, moneyHealthScore.breakdown.insurance)}%`,
                             }}
                           ></div>
                           <span className="health-value">
@@ -1995,7 +2065,7 @@ function DashboardApp({ user, onLogout }) {
                           <div
                             className="mini-bar"
                             style={{
-                              width: `${Math.min(100, moneyHealthScore.breakdown.debt * 6.67)}%`,
+                              width: `${Math.min(100, moneyHealthScore.breakdown.debt)}%`,
                             }}
                           ></div>
                           <span className="health-value">
@@ -2007,7 +2077,7 @@ function DashboardApp({ user, onLogout }) {
                           <div
                             className="mini-bar"
                             style={{
-                              width: `${Math.min(100, moneyHealthScore.breakdown.investment * 5)}%`,
+                              width: `${Math.min(100, moneyHealthScore.breakdown.investment)}%`,
                             }}
                           ></div>
                           <span className="health-value">
@@ -2019,7 +2089,7 @@ function DashboardApp({ user, onLogout }) {
                           <div
                             className="mini-bar"
                             style={{
-                              width: `${Math.min(100, moneyHealthScore.breakdown.tax * 6.67)}%`,
+                              width: `${Math.min(100, moneyHealthScore.breakdown.tax)}%`,
                             }}
                           ></div>
                           <span className="health-value">
@@ -2031,7 +2101,7 @@ function DashboardApp({ user, onLogout }) {
                           <div
                             className="mini-bar"
                             style={{
-                              width: `${Math.min(100, moneyHealthScore.breakdown.retirement * 6.67)}%`,
+                              width: `${Math.min(100, moneyHealthScore.breakdown.retirement)}%`,
                             }}
                           ></div>
                           <span className="health-value">
@@ -2043,49 +2113,6 @@ function DashboardApp({ user, onLogout }) {
                   )}
                 </article>
 
-                <article className="card">
-                  <p className="card-label">📊 Net Worth Tracker</p>
-                  <div className="networth-overview">
-                    <div className="networth-item assets">
-                      <p className="networth-label">Total Assets</p>
-                      <h3>{formatINR(netWorth.assets)}</h3>
-                    </div>
-                    <div className="networth-divider">−</div>
-                    <div className="networth-item liabilities">
-                      <p className="networth-label">Liabilities</p>
-                      <h3>{formatINR(netWorth.liabilities)}</h3>
-                    </div>
-                    <div className="networth-divider">=</div>
-                    <div className="networth-item total">
-                      <p className="networth-label">Net Worth</p>
-                      <h3
-                        style={{
-                          color: netWorth.netWorth > 0 ? "#0f766e" : "#dc2626",
-                        }}
-                      >
-                        {formatINR(netWorth.netWorth)}
-                      </h3>
-                    </div>
-                  </div>
-                  <div className="networth-breakdown">
-                    <div className="breakdown-row">
-                      <span>Savings</span>
-                      <strong>{formatINR(finance.assets.savings)}</strong>
-                    </div>
-                    <div className="breakdown-row">
-                      <span>Investments</span>
-                      <strong>{formatINR(finance.assets.investments)}</strong>
-                    </div>
-                    <div className="breakdown-row">
-                      <span>Other Assets</span>
-                      <strong>{formatINR(finance.assets.otherAssets)}</strong>
-                    </div>
-                  </div>
-                </article>
-              </div>
-
-              {/* CASH FLOW & EXISTING CARDS */}
-              <div className="grid two-up roomy-row">
                 <article className="card">
                   <p className="card-label">💰 Monthly Cash Flow</p>
                   <div className="cashflow-visual">
@@ -2125,24 +2152,6 @@ function DashboardApp({ user, onLogout }) {
                   </div>
                 </article>
 
-                <article className="card highlight-card">
-                  <p className="card-label">AI Insight Card</p>
-                  <h2>{topCategory} spending is driving your monthly burn.</h2>
-                  <p>
-                    {budgetLeft > 8000
-                      ? `You still have ${formatINR(budgetLeft)} available. AI suggests reserving part for your goal.`
-                      : `Only ${formatINR(Math.max(0, budgetLeft))} remains. Shift to essentials to stay on target.`}
-                  </p>
-                  <div className="tag-row">
-                    <span className="tag">
-                      {budgetUsage.toFixed(1)}% budget used
-                    </span>
-                    <span className="tag">
-                      {goalProgress.toFixed(1)}% goal funded
-                    </span>
-                    <span className="tag">{topCategory} highest category</span>
-                  </div>
-                </article>
               </div>
 
               <div className="grid chart-grid">
@@ -2516,11 +2525,12 @@ function DashboardApp({ user, onLogout }) {
                   <p className="card-label">Recent Transactions</p>
                   <div className="stack">
                     {finance.transactions
+                      .map((txn, index) => ({ txn, index }))
                       .slice()
                       .reverse()
                       .slice(0, 10)
-                      .map((txn, idx) => (
-                        <div className="txn-item" key={`${txn.desc}-${idx}`}>
+                      .map(({ txn, index }) => (
+                        <div className="txn-item" key={`${txn.desc}-${index}`}>
                           <div className="row">
                             <strong>{txn.desc}</strong>
                             <strong
@@ -2535,7 +2545,16 @@ function DashboardApp({ user, onLogout }) {
                               {formatINR(Math.abs(txn.amount))}
                             </strong>
                           </div>
-                          <small>{txn.category}</small>
+                          <div className="row">
+                            <small>{txn.category}</small>
+                            <button
+                              type="button"
+                              className="txn-delete-btn"
+                              onClick={() => deleteTransaction(index)}
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       ))}
                   </div>

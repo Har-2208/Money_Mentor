@@ -2897,6 +2897,20 @@ button:hover {
   color: var(--text-soft);
 }
 
+.txn-delete-btn {
+  border: 1px solid rgba(220, 38, 38, 0.45);
+  background: rgba(220, 38, 38, 0.1);
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 8px;
+}
+
+.txn-delete-btn:hover {
+  background: rgba(220, 38, 38, 0.16);
+}
+
 .chart-svg {
   width: 100%;
   min-height: 240px;
