@@ -1,6 +1,6 @@
 # main.py
 
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +32,7 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     user_id: int
     query: str
+    user_context: Dict[str, Any] | None = None
 
 
 class FireRequest(BaseModel):
@@ -56,6 +57,7 @@ class LifeEventRequest(BaseModel):
     annual_income: float | None = None
     monthly_expenses: float | None = None
     bonus: float | None = None
+    use_ai: bool = False
 
 
 class CoupleRequest(BaseModel):
@@ -68,6 +70,7 @@ class CoupleRequest(BaseModel):
     partner2_investments: float | None = None
     shared_goals: str | None = None
     risk_preference: str | None = None
+    use_ai: bool = False
 
 
 @app.get("/")
@@ -89,7 +92,7 @@ def root():
 
 @app.post("/ask")
 def ask_ai(req: QueryRequest):
-    result = orchestrator(req.query, req.user_id)
+    result = orchestrator(req.query, req.user_id, user_context=req.user_context)
     return result
 
 
@@ -123,6 +126,7 @@ def life_event(req: LifeEventRequest):
             "monthly_expenses": req.monthly_expenses,
             "bonus": req.bonus,
         },
+        use_ai=req.use_ai,
     )
 
 
@@ -140,6 +144,7 @@ def couple_planner(req: CoupleRequest):
             "shared_goals": req.shared_goals,
             "risk_preference": req.risk_preference,
         },
+        use_ai=req.use_ai,
     )
 
 

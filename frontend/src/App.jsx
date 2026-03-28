@@ -129,6 +129,76 @@ function formatINR(value) {
   return `INR ${Math.round(value).toLocaleString("en-IN")}`;
 }
 
+function cleanAgentLine(line) {
+  if (!line) return "";
+  return line
+    .replace(/\*\*\*(.*?)\*\*\*/g, "$1")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`+/g, "")
+    .replace(/^#+\s*/, "")
+    .replace(/^>\s*/, "")
+    .replace(/^"+|"+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function structureAgentExplanation(explanation) {
+  const fallback = {
+    answer: "No AI response was returned.",
+    reasoning: "The backend did not return a readable explanation.",
+    points: [],
+  };
+
+  if (typeof explanation !== "string" || !explanation.trim()) {
+    return fallback;
+  }
+
+  const lines = explanation
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter(
+      (line) =>
+        !/^["'`]{3,}$/.test(line) && !/^(\*{3,}|-{3,}|_{3,})$/.test(line),
+    );
+
+  const paragraphs = [];
+  const points = [];
+
+  lines.forEach((line) => {
+    const bulletMatch = line.match(/^[-*•]\s+(.+)$/);
+    const numberedMatch = line.match(/^\d+[.)]\s+(.+)$/);
+    const content = bulletMatch
+      ? bulletMatch[1]
+      : numberedMatch
+        ? numberedMatch[1]
+        : line;
+    const cleaned = cleanAgentLine(content);
+    if (!cleaned) return;
+
+    if (bulletMatch || numberedMatch) {
+      points.push(cleaned);
+    } else {
+      paragraphs.push(cleaned);
+    }
+  });
+
+  const dedupedPoints = [...new Set(points)].slice(0, 6);
+  const answer = paragraphs[0] || dedupedPoints[0] || fallback.answer;
+  const reasoning =
+    paragraphs.slice(1).join(" ") ||
+    (dedupedPoints.length > 0
+      ? "Key recommendations are structured below."
+      : fallback.reasoning);
+
+  return {
+    answer,
+    reasoning,
+    points: dedupedPoints,
+  };
+}
+
 function getUsers() {
   const raw = localStorage.getItem(USERS_KEY);
   if (!raw) return [];
@@ -1014,7 +1084,15 @@ function DashboardApp({ user, onLogout }) {
   const [chatInput, setChatInput] = useState("");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [currentProfileSection, setCurrentProfileSection] = useState(0);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessages, setChatMessages] = useState([
+    {
+      role: "ai",
+      answer: "Ask a question to begin personalized guidance.",
+      reasoning:
+        "Warning: This is AI-generated guidance, not licensed financial advice.",
+      impact: "",
+    },
+  ]);
   const [chatPending, setChatPending] = useState(false);
   const [chatError, setChatError] = useState("");
   const [agentInsights, setAgentInsights] = useState({
@@ -1049,38 +1127,10 @@ function DashboardApp({ user, onLogout }) {
   }, [profileData]);
 
   useEffect(() => {
-    const fetchWelcome = async () => {
-      try {
-        const result = await agentService.askAI(
-          "Give a short summary of how you can help me right now.",
-          userId,
-        );
-        setChatMessages([
-          {
-            role: "ai",
-            answer: result?.explanation || "Your AI mentor is ready.",
-            reasoning: `Intent detected: ${result?.intent || "general"}`,
-            impact:
-              "Ask a question to get personalized financial guidance from backend agents.",
-          },
-        ]);
-      } catch {
-        setChatMessages([
-          {
-            role: "ai",
-            answer: "Your AI mentor is ready.",
-            reasoning:
-              "Backend is reachable but no startup summary was returned.",
-            impact: "Ask a question to begin.",
-          },
-        ]);
-      }
-    };
+    if (activeScreen !== "insights") {
+      return;
+    }
 
-    fetchWelcome();
-  }, [userId]);
-
-  useEffect(() => {
     const loadInsights = async () => {
       setInsightsLoading(true);
       try {
@@ -1104,8 +1154,9 @@ function DashboardApp({ user, onLogout }) {
           agentService.getLifeEventPlan(
             userId,
             "Annual financial planning review",
+            false,
           ),
-          agentService.getCouplePlan(userId),
+          agentService.getCouplePlan(userId, false),
         ]);
 
         setAgentInsights({ tax, fire, lifeEvent, couple });
@@ -1122,7 +1173,7 @@ function DashboardApp({ user, onLogout }) {
     };
 
     loadInsights();
-  }, [profileData, userId]);
+  }, [activeScreen, profileData, userId]);
 
   // Calculate profile completion percentage
   const profileCompletion = useMemo(() => {
@@ -1185,15 +1236,74 @@ function DashboardApp({ user, onLogout }) {
   }, [profileData]);
 
   // Money Health Score Calculation (0-100)
+  const hasMoneyHealthInputs = useMemo(() => {
+    const incomeTotal =
+      toNumber(profileData.income.baseSalary) +
+      toNumber(profileData.income.hra) +
+      toNumber(profileData.income.otherAllowances) +
+      toNumber(profileData.income.bonus) +
+      toNumber(profileData.income.otherIncome);
+
+    const expenseTotal =
+      toNumber(profileData.expenses.rent) +
+      toNumber(profileData.expenses.food) +
+      toNumber(profileData.expenses.travel) +
+      toNumber(profileData.expenses.subscriptions) +
+      toNumber(profileData.expenses.misc);
+
+    const assetTotal =
+      toNumber(profileData.assets.mutualFunds) +
+      toNumber(profileData.assets.ppf) +
+      toNumber(profileData.assets.stocks) +
+      toNumber(profileData.assets.fd) +
+      toNumber(profileData.assets.cash);
+
+    const liabilityTotal =
+      toNumber(profileData.liabilities.homeLoan) +
+      toNumber(profileData.liabilities.emi) +
+      toNumber(profileData.liabilities.creditCardDues);
+
+    const insuranceTotal =
+      toNumber(profileData.insurance.healthInsurance) +
+      toNumber(profileData.insurance.lifeInsurance);
+
+    const goalTotal = profileData.goals.reduce(
+      (sum, goal) => sum + toNumber(goal.targetAmount),
+      0,
+    );
+
+    return (
+      incomeTotal > 0 ||
+      expenseTotal > 0 ||
+      assetTotal > 0 ||
+      liabilityTotal > 0 ||
+      insuranceTotal > 0 ||
+      goalTotal > 0
+    );
+  }, [profileData]);
+
   const moneyHealthScore = useMemo(() => {
+    const emptyBreakdown = {
+      emergencyFund: 0,
+      insurance: 0,
+      debt: 0,
+      investment: 0,
+      tax: 0,
+      retirement: 0,
+    };
+
+    if (!hasMoneyHealthInputs) {
+      return { available: false, total: 0, breakdown: emptyBreakdown };
+    }
+
     let score = 0;
     const scores = {};
 
     // Emergency Fund: 0-20 points
-    scores.emergencyFund = Math.min(
-      20,
-      (finance.emergencyFund / finance.emergencyFundTarget) * 20,
-    );
+    scores.emergencyFund =
+      finance.emergencyFundTarget > 0
+        ? Math.min(20, (finance.emergencyFund / finance.emergencyFundTarget) * 20)
+        : 0;
 
     // Insurance: 0-15 points
     scores.insurance =
@@ -1217,14 +1327,17 @@ function DashboardApp({ user, onLogout }) {
     );
 
     // Tax Planning: 0-15 points
-    scores.tax = finance.taxSavings > 0 ? 15 : 5;
+    const declaredTaxSavings =
+      toNumber(profileData.assets.ppf) +
+      toNumber(profileData.insurance.healthInsurance);
+    scores.tax = Math.min(15, (declaredTaxSavings / 150000) * 15);
 
     // Retirement: 0-15 points
     scores.retirement = Math.min(15, (finance.retirement / 500000) * 15);
 
     score = Object.values(scores).reduce((a, b) => a + b, 0);
-    return { total: Math.round(score), breakdown: scores };
-  }, [finance]);
+    return { available: true, total: Math.round(score), breakdown: scores };
+  }, [finance, hasMoneyHealthInputs, profileData]);
 
   // Net Worth Calculation
   const netWorth = useMemo(() => {
@@ -1366,16 +1479,64 @@ function DashboardApp({ user, onLogout }) {
   const appendUser = (text) =>
     setChatMessages((prev) => [...prev, { role: "user", text }]);
 
+  const chatUserContext = useMemo(() => {
+    const annualSalary =
+      toNumber(profileData.income.baseSalary) +
+      toNumber(profileData.income.hra) +
+      toNumber(profileData.income.otherAllowances) +
+      toNumber(profileData.income.otherIncome);
+
+    const monthlyExpenses =
+      toNumber(profileData.expenses.rent) +
+      toNumber(profileData.expenses.food) +
+      toNumber(profileData.expenses.travel) +
+      toNumber(profileData.expenses.subscriptions) +
+      toNumber(profileData.expenses.misc);
+
+    const currentAge = toNumber(profileData.personalInfo.age);
+    const retirementYears = toNumber(profileData.goals?.[0]?.years);
+    const retirementAge =
+      currentAge > 0 && retirementYears > 0 ? currentAge + retirementYears : 0;
+
+    return {
+      income: {
+        salary: annualSalary,
+        bonus: toNumber(profileData.income.bonus),
+      },
+      expenses: {
+        total: monthlyExpenses,
+      },
+      goals: {
+        current_age: currentAge,
+        retirement_age: retirementAge,
+      },
+      investments: {
+        current_corpus: Math.max(0, toNumber(finance.assets.savings) + toNumber(finance.assets.investments)),
+        monthly_investment: 0,
+      },
+      tax: {
+        deductions: {
+          "80C": Math.max(0, toNumber(profileData.assets.ppf)),
+          "80D": Math.max(0, toNumber(profileData.insurance.healthInsurance)),
+        },
+      },
+      partner: {
+        salary: 0,
+      },
+    };
+  }, [profileData, finance.assets.savings, finance.assets.investments]);
+
   const sendChatQuery = async (query) => {
     setChatError("");
     setChatPending(true);
     try {
-      const result = await agentService.askAI(query, userId);
+      const result = await agentService.askAI(query, userId, chatUserContext);
+      const structured = structureAgentExplanation(result?.explanation);
       appendAI({
-        answer: result?.explanation || "No AI response was returned.",
-        reasoning: `Intent detected: ${result?.intent || "general"}`,
-        impact:
-          "This answer is generated by backend agents and may include compliance notes.",
+        answer: structured.answer,
+        reasoning: `${structured.reasoning} Intent detected: ${result?.intent || "general"}.`,
+        points: structured.points,
+        impact: "",
       });
     } catch (error) {
       setChatError(error?.message || "Failed to reach backend AI endpoint.");
@@ -1393,9 +1554,9 @@ function DashboardApp({ user, onLogout }) {
     event.preventDefault();
     const value = chatInput.trim();
     if (!value) return;
+    setChatInput("");
     appendUser(value);
     await sendChatQuery(value);
-    setChatInput("");
   };
 
   const addTransaction = (event) => {
@@ -1743,136 +1904,143 @@ function DashboardApp({ user, onLogout }) {
               <div className="grid two-up">
                 <article className="card health-score-card">
                   <p className="card-label">💚 Money Health Score</p>
-                  <div className="health-score-main">
-                    <div className="score-circle">
-                      <svg viewBox="0 0 120 120" className="score-svg">
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r="50"
-                          fill="none"
-                          stroke="rgba(16, 34, 45, 0.1)"
-                          strokeWidth="8"
-                        />
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r="50"
-                          fill="none"
-                          stroke={
-                            moneyHealthScore.total >= 75
-                              ? "#0f766e"
-                              : moneyHealthScore.total >= 50
-                                ? "#f59e0b"
-                                : "#dc2626"
-                          }
-                          strokeWidth="8"
-                          strokeDasharray={`${(moneyHealthScore.total / 100) * 314.15} 314.15`}
-                          strokeDashoffset="0"
-                          transform="rotate(-90 60 60)"
-                          strokeLinecap="round"
-                        />
-                        <text
-                          x="60"
-                          y="70"
-                          fontSize="36"
-                          fontWeight="700"
-                          textAnchor="middle"
-                          fill={
-                            moneyHealthScore.total >= 75
-                              ? "#0f766e"
-                              : moneyHealthScore.total >= 50
-                                ? "#f59e0b"
-                                : "#dc2626"
-                          }
-                        >
-                          {moneyHealthScore.total}
-                        </text>
-                      </svg>
-                      <p className="score-status">
-                        {moneyHealthScore.total >= 75
-                          ? "Excellent"
-                          : moneyHealthScore.total >= 50
-                            ? "Good"
-                            : "Needs Work"}
-                      </p>
+                  {!moneyHealthScore.available ? (
+                    <p className="section-hint">
+                      Complete your income, expenses, assets, and liabilities in
+                      profile setup to unlock Money Health Score.
+                    </p>
+                  ) : (
+                    <div className="health-score-main">
+                      <div className="score-circle">
+                        <svg viewBox="0 0 120 120" className="score-svg">
+                          <circle
+                            cx="60"
+                            cy="60"
+                            r="50"
+                            fill="none"
+                            stroke="rgba(16, 34, 45, 0.1)"
+                            strokeWidth="8"
+                          />
+                          <circle
+                            cx="60"
+                            cy="60"
+                            r="50"
+                            fill="none"
+                            stroke={
+                              moneyHealthScore.total >= 75
+                                ? "#0f766e"
+                                : moneyHealthScore.total >= 50
+                                  ? "#f59e0b"
+                                  : "#dc2626"
+                            }
+                            strokeWidth="8"
+                            strokeDasharray={`${(moneyHealthScore.total / 100) * 314.15} 314.15`}
+                            strokeDashoffset="0"
+                            transform="rotate(-90 60 60)"
+                            strokeLinecap="round"
+                          />
+                          <text
+                            x="60"
+                            y="70"
+                            fontSize="36"
+                            fontWeight="700"
+                            textAnchor="middle"
+                            fill={
+                              moneyHealthScore.total >= 75
+                                ? "#0f766e"
+                                : moneyHealthScore.total >= 50
+                                  ? "#f59e0b"
+                                  : "#dc2626"
+                            }
+                          >
+                            {moneyHealthScore.total}
+                          </text>
+                        </svg>
+                        <p className="score-status">
+                          {moneyHealthScore.total >= 75
+                            ? "Excellent"
+                            : moneyHealthScore.total >= 50
+                              ? "Good"
+                              : "Needs Work"}
+                        </p>
+                      </div>
+                      <div className="health-breakdown">
+                        <div className="health-item">
+                          <span className="health-label">Emergency Fund</span>
+                          <div
+                            className="mini-bar"
+                            style={{
+                              width: `${Math.min(100, moneyHealthScore.breakdown.emergencyFund * 5)}%`,
+                            }}
+                          ></div>
+                          <span className="health-value">
+                            {Math.round(moneyHealthScore.breakdown.emergencyFund)}
+                            %
+                          </span>
+                        </div>
+                        <div className="health-item">
+                          <span className="health-label">Insurance</span>
+                          <div
+                            className="mini-bar"
+                            style={{
+                              width: `${Math.min(100, moneyHealthScore.breakdown.insurance * 6.67)}%`,
+                            }}
+                          ></div>
+                          <span className="health-value">
+                            {Math.round(moneyHealthScore.breakdown.insurance)}%
+                          </span>
+                        </div>
+                        <div className="health-item">
+                          <span className="health-label">Debt</span>
+                          <div
+                            className="mini-bar"
+                            style={{
+                              width: `${Math.min(100, moneyHealthScore.breakdown.debt * 6.67)}%`,
+                            }}
+                          ></div>
+                          <span className="health-value">
+                            {Math.round(moneyHealthScore.breakdown.debt)}%
+                          </span>
+                        </div>
+                        <div className="health-item">
+                          <span className="health-label">Investment</span>
+                          <div
+                            className="mini-bar"
+                            style={{
+                              width: `${Math.min(100, moneyHealthScore.breakdown.investment * 5)}%`,
+                            }}
+                          ></div>
+                          <span className="health-value">
+                            {Math.round(moneyHealthScore.breakdown.investment)}%
+                          </span>
+                        </div>
+                        <div className="health-item">
+                          <span className="health-label">Tax Planning</span>
+                          <div
+                            className="mini-bar"
+                            style={{
+                              width: `${Math.min(100, moneyHealthScore.breakdown.tax * 6.67)}%`,
+                            }}
+                          ></div>
+                          <span className="health-value">
+                            {Math.round(moneyHealthScore.breakdown.tax)}%
+                          </span>
+                        </div>
+                        <div className="health-item">
+                          <span className="health-label">Retirement</span>
+                          <div
+                            className="mini-bar"
+                            style={{
+                              width: `${Math.min(100, moneyHealthScore.breakdown.retirement * 6.67)}%`,
+                            }}
+                          ></div>
+                          <span className="health-value">
+                            {Math.round(moneyHealthScore.breakdown.retirement)}%
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="health-breakdown">
-                      <div className="health-item">
-                        <span className="health-label">Emergency Fund</span>
-                        <div
-                          className="mini-bar"
-                          style={{
-                            width: `${Math.min(100, moneyHealthScore.breakdown.emergencyFund * 5)}%`,
-                          }}
-                        ></div>
-                        <span className="health-value">
-                          {Math.round(moneyHealthScore.breakdown.emergencyFund)}
-                          %
-                        </span>
-                      </div>
-                      <div className="health-item">
-                        <span className="health-label">Insurance</span>
-                        <div
-                          className="mini-bar"
-                          style={{
-                            width: `${Math.min(100, moneyHealthScore.breakdown.insurance * 6.67)}%`,
-                          }}
-                        ></div>
-                        <span className="health-value">
-                          {Math.round(moneyHealthScore.breakdown.insurance)}%
-                        </span>
-                      </div>
-                      <div className="health-item">
-                        <span className="health-label">Debt</span>
-                        <div
-                          className="mini-bar"
-                          style={{
-                            width: `${Math.min(100, moneyHealthScore.breakdown.debt * 6.67)}%`,
-                          }}
-                        ></div>
-                        <span className="health-value">
-                          {Math.round(moneyHealthScore.breakdown.debt)}%
-                        </span>
-                      </div>
-                      <div className="health-item">
-                        <span className="health-label">Investment</span>
-                        <div
-                          className="mini-bar"
-                          style={{
-                            width: `${Math.min(100, moneyHealthScore.breakdown.investment * 5)}%`,
-                          }}
-                        ></div>
-                        <span className="health-value">
-                          {Math.round(moneyHealthScore.breakdown.investment)}%
-                        </span>
-                      </div>
-                      <div className="health-item">
-                        <span className="health-label">Tax Planning</span>
-                        <div
-                          className="mini-bar"
-                          style={{
-                            width: `${Math.min(100, moneyHealthScore.breakdown.tax * 6.67)}%`,
-                          }}
-                        ></div>
-                        <span className="health-value">
-                          {Math.round(moneyHealthScore.breakdown.tax)}%
-                        </span>
-                      </div>
-                      <div className="health-item">
-                        <span className="health-label">Retirement</span>
-                        <div
-                          className="mini-bar"
-                          style={{
-                            width: `${Math.min(100, moneyHealthScore.breakdown.retirement * 6.67)}%`,
-                          }}
-                        ></div>
-                        <span className="health-value">
-                          {Math.round(moneyHealthScore.breakdown.retirement)}%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </article>
 
                 <article className="card">
@@ -2079,13 +2247,20 @@ function DashboardApp({ user, onLogout }) {
                         <div key={idx} className="msg ai">
                           <div className="ai-tiles">
                             <div className="ai-tile ai-answer">
-                              <p>
-                                {msg.answer} {msg.impact}
-                              </p>
+                              <p>{msg.answer}</p>
+                              {Array.isArray(msg.points) && msg.points.length > 0 && (
+                                <ul className="ai-clean-list">
+                                  {msg.points.map((point, pointIndex) => (
+                                    <li key={`${idx}-point-${pointIndex}`}>{point}</li>
+                                  ))}
+                                </ul>
+                              )}
                             </div>
                             <div className="ai-tile ai-why">
                               <strong>Reason</strong>
-                              <p>{msg.reasoning}</p>
+                              <p>
+                                {msg.reasoning} {msg.impact}
+                              </p>
                             </div>
                           </div>
                         </div>

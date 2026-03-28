@@ -36,10 +36,11 @@ function normalizeUserId(userId) {
   return Number.isInteger(numericId) && numericId > 0 ? numericId : 1;
 }
 
-async function askAI(query, userId = null) {
+async function askAI(query, userId = null, userContext = null) {
   return request("/ask", {
     user_id: normalizeUserId(userId),
     query,
+    user_context: userContext,
   });
 }
 
@@ -58,16 +59,18 @@ async function getTaxAnalysis(userId = null, salary, deductions) {
   });
 }
 
-async function getLifeEventPlan(userId = null, event) {
+async function getLifeEventPlan(userId = null, event, useAI = false) {
   return request("/feature/life-event", {
     user_id: normalizeUserId(userId),
     event,
+    use_ai: useAI,
   });
 }
 
-async function getCouplePlan(userId = null) {
+async function getCouplePlan(userId = null, useAI = false) {
   return request("/feature/couple", {
     user_id: normalizeUserId(userId),
+    use_ai: useAI,
   });
 }
 

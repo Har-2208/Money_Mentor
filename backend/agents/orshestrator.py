@@ -2,7 +2,6 @@ import copy
 from typing import Any, Dict, List
 
 from backend.agents.behavior_agent import get_behavior_profile
-from backend.agents.compliance_agent import add_disclaimer
 from backend.agents.explanation_agent import explain_response
 from backend.agents.portfolio_xray_crew import run_portfolio_xray_crew
 from backend.agents.tax_wizard_crew import run_tax_wizard_crew
@@ -54,7 +53,75 @@ def _clean_lines(text: str) -> List[str]:
     return lines
 
 
-def _llm_bullet_suggestions(prompt: str, fallback: List[str], max_items: int = 4) -> List[str]:
+def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    merged = copy.deepcopy(base)
+    for key, value in (overrides or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _sanitize_user_context(context: Dict[str, Any] | None) -> Dict[str, Any]:
+    if not isinstance(context, dict):
+        return {}
+    allowed = {
+        "income",
+        "expenses",
+        "goals",
+        "investments",
+        "tax",
+        "partner",
+    }
+    return {k: v for k, v in context.items() if k in allowed}
+
+
+def _missing_fields_for_intent(intent: str, user_data: Dict[str, Any]) -> List[str]:
+    missing: List[str] = []
+
+    salary = _to_float(user_data.get("income", {}).get("salary"), 0.0)
+    monthly_expenses = _to_float(user_data.get("expenses", {}).get("total"), 0.0)
+    current_age = _to_int(user_data.get("goals", {}).get("current_age"), 0)
+    retirement_age = _to_int(user_data.get("goals", {}).get("retirement_age"), 0)
+    partner_salary = _to_float(user_data.get("partner", {}).get("salary"), 0.0)
+
+    if intent == "tax":
+        if salary <= 0:
+            missing.append("annual salary")
+
+    elif intent == "retirement":
+        if current_age <= 0:
+            missing.append("current age")
+        if retirement_age <= current_age:
+            missing.append("retirement age (greater than current age)")
+        if monthly_expenses <= 0:
+            missing.append("monthly expenses")
+
+    elif intent == "life_event":
+        if salary <= 0:
+            missing.append("annual income")
+        if monthly_expenses <= 0:
+            missing.append("monthly expenses")
+
+    elif intent == "couple":
+        if salary <= 0:
+            missing.append("your annual income")
+        if partner_salary <= 0:
+            missing.append("partner annual income")
+
+    return missing
+
+
+def _llm_bullet_suggestions(
+    prompt: str,
+    fallback: List[str],
+    max_items: int = 4,
+    use_ai: bool = True,
+) -> List[str]:
+    if not use_ai:
+        return fallback
+
     text = ask_gemini(prompt)
     if "Gemini is not configured" in text:
         return fallback
@@ -151,7 +218,7 @@ def recalculate_fire_plan_on_retirement_age_change(
     return existing
 
 
-def _build_life_event_plan(user_data: Dict[str, Any], event: str) -> Dict[str, Any]:
+def _build_life_event_plan(user_data: Dict[str, Any], event: str, use_ai: bool = False) -> Dict[str, Any]:
     annual_income = _to_float(user_data.get("income", {}).get("salary"), 0.0)
     monthly_expense = _to_float(user_data.get("expenses", {}).get("total"), 0.0)
     bonus = _to_float(user_data.get("income", {}).get("bonus"), 0.0)
@@ -177,6 +244,7 @@ def _build_life_event_plan(user_data: Dict[str, Any], event: str) -> Dict[str, A
             "Re-evaluate tax-saving and protection coverage after this event.",
             "Track progress with a 90-day follow-up review.",
         ],
+        use_ai=use_ai,
     )
 
     warnings: List[str] = []
@@ -196,7 +264,11 @@ def _build_life_event_plan(user_data: Dict[str, Any], event: str) -> Dict[str, A
     }
 
 
-def _build_couple_plan(user_data: Dict[str, Any], profile_overrides: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def _build_couple_plan(
+    user_data: Dict[str, Any],
+    profile_overrides: Dict[str, Any] | None = None,
+    use_ai: bool = False,
+) -> Dict[str, Any]:
     profile_overrides = profile_overrides or {}
 
     partner1_income = _to_float(profile_overrides.get("partner1_income"), _to_float(user_data.get("income", {}).get("salary"), 0.0))
@@ -225,6 +297,7 @@ def _build_couple_plan(user_data: Dict[str, Any], profile_overrides: Dict[str, A
             "Rebalance jointly every 6 months and after major life changes.",
         ],
         max_items=3,
+        use_ai=use_ai,
     )
 
     tax_suggestions = _llm_bullet_suggestions(
@@ -238,6 +311,7 @@ def _build_couple_plan(user_data: Dict[str, Any], profile_overrides: Dict[str, A
             "Evaluate old vs new regime each year before filing.",
         ],
         max_items=3,
+        use_ai=use_ai,
     )
 
     goal_strategy = [
@@ -286,7 +360,12 @@ def run_tax_feature(user_id: int, salary: float | None = None, deductions: Dict[
     return run_tax_wizard_crew(resolved_salary, resolved_deductions)
 
 
-def run_life_event_feature(user_id: int, event: str, profile_overrides: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def run_life_event_feature(
+    user_id: int,
+    event: str,
+    profile_overrides: Dict[str, Any] | None = None,
+    use_ai: bool = False,
+) -> Dict[str, Any]:
     user_data = get_user_data(user_id)
     profile_overrides = profile_overrides or {}
     if profile_overrides.get("annual_income") is not None:
@@ -295,46 +374,83 @@ def run_life_event_feature(user_id: int, event: str, profile_overrides: Dict[str
         user_data.setdefault("expenses", {})["total"] = _to_float(profile_overrides.get("monthly_expenses"))
     if profile_overrides.get("bonus") is not None:
         user_data.setdefault("income", {})["bonus"] = _to_float(profile_overrides.get("bonus"))
-    return _build_life_event_plan(user_data, event)
+    return _build_life_event_plan(user_data, event, use_ai=use_ai)
 
 
-def run_couple_feature(user_id: int, profile_overrides: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def run_couple_feature(
+    user_id: int,
+    profile_overrides: Dict[str, Any] | None = None,
+    use_ai: bool = False,
+) -> Dict[str, Any]:
     user_data = get_user_data(user_id)
-    return _build_couple_plan(user_data, profile_overrides)
+    return _build_couple_plan(user_data, profile_overrides, use_ai=use_ai)
 
 
 def run_portfolio_feature(file_bytes: bytes) -> Dict[str, Any]:
     return run_portfolio_xray_crew(file_bytes)
 
 
-def orchestrator(query: str, user_id: int) -> Dict[str, Any]:
+def orchestrator(query: str, user_id: int, user_context: Dict[str, Any] | None = None) -> Dict[str, Any]:
     intent = detect_intent(query)
     user_data = get_user_data(user_id)
+    user_data = _deep_merge(user_data, _sanitize_user_context(user_context))
     behavior = get_behavior_profile(user_id, user_data)
 
+    missing_fields = _missing_fields_for_intent(intent, user_data)
+
     if intent == "retirement":
-        result = _build_fire_plan(user_data, behavior)
+        if missing_fields:
+            result = {
+                "message": "Personalized FIRE math is limited because some profile inputs are missing.",
+                "missing_fields": missing_fields,
+            }
+        else:
+            result = _build_fire_plan(user_data, behavior)
     elif intent == "tax":
-        salary = _to_float(user_data.get("income", {}).get("salary"), 0.0)
-        deductions = user_data.get("tax", {}).get("deductions", {})
-        result = run_tax_wizard_crew(salary, deductions)
+        if missing_fields:
+            result = {
+                "message": "Tax projections are approximate because profile inputs are incomplete.",
+                "missing_fields": missing_fields,
+            }
+        else:
+            salary = _to_float(user_data.get("income", {}).get("salary"), 0.0)
+            deductions = user_data.get("tax", {}).get("deductions", {})
+            result = run_tax_wizard_crew(salary, deductions)
     elif intent == "life_event":
-        result = _build_life_event_plan(user_data, event=query)
+        if missing_fields:
+            result = {
+                "message": "Life-event guidance is available, but personalization is limited by missing inputs.",
+                "missing_fields": missing_fields,
+                "event": query,
+            }
+        else:
+            result = _build_life_event_plan(user_data, event=query, use_ai=False)
     elif intent == "couple":
-        result = _build_couple_plan(user_data)
+        if missing_fields:
+            result = {
+                "message": "Couple planning guidance is available, but key income data is missing.",
+                "missing_fields": missing_fields,
+            }
+        else:
+            result = _build_couple_plan(user_data, use_ai=False)
     elif intent == "portfolio":
         result = {
             "message": "Use the dedicated portfolio endpoint with CAMS PDF upload for portfolio analysis output.",
         }
     else:
         result = {
-            "message": "I can help with FIRE planning, tax optimization, life events, and couple planning.",
+            "message": "General finance question detected. Provide broad guidance and then tailor with available profile context.",
         }
 
-    explanation = explain_response(result)
-    final_response = add_disclaimer(explanation)
+    explanation = explain_response(
+        result,
+        query=query,
+        intent=intent,
+        user_context=user_data,
+        missing_fields=missing_fields,
+    )
     return {
         "intent": intent,
         "data": result,
-        "explanation": final_response,
+        "explanation": explanation,
     }
