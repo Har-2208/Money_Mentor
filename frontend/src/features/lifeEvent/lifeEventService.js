@@ -12,8 +12,9 @@ const apiClient = axios.create({
 
 async function getAdvice(selectedEvent, context = {}) {
   try {
+    const userId = await getActiveUserId();
     const response = await apiClient.post("/feature/life-event", {
-      user_id: getActiveUserId(),
+      user_id: userId,
       event: selectedEvent,
       annual_income: context?.annual_income ?? null,
       monthly_expenses: context?.monthly_expenses ?? null,

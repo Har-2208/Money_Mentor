@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
 import requests
@@ -8,7 +9,10 @@ from backend.config import get_env_str
 from backend.db.supabase_client import get_supabase_rest_config
 
 
-def _default_user_data(user_id: int) -> Dict[str, Any]:
+logger = logging.getLogger(__name__)
+
+
+def _default_user_data(user_id: str | int) -> Dict[str, Any]:
     return {
         "user_id": user_id,
         "income": {
@@ -54,21 +58,24 @@ def _merge_defaults(defaults: Dict[str, Any], payload: Dict[str, Any]) -> Dict[s
     return merged
 
 
-def get_user_data(user_id: int) -> Dict[str, Any]:
+def get_user_data(user_id: str | int) -> Dict[str, Any]:
     defaults = _default_user_data(user_id)
     rest_config = get_supabase_rest_config()
 
     if rest_config is None:
         return defaults
 
-    table_name = get_env_str("SUPABASE_PROFILE_TABLE", "user_financial_profile")
+    table_name = get_env_str("SUPABASE_PROFILE_TABLE", "expense_profiles")
+    user_id_value = str(user_id).strip()
+    if not user_id_value:
+        return defaults
 
     try:
         response = requests.get(
             f"{rest_config['base_url']}/{table_name}",
             params={
                 "select": "*",
-                "user_id": f"eq.{user_id}",
+                "user_id": f"eq.{user_id_value}",
                 "limit": 1,
             },
             headers={
@@ -112,5 +119,28 @@ def get_user_data(user_id: int) -> Dict[str, Any]:
         }
 
         return _merge_defaults(defaults, mapped)
-    except Exception:
+    except requests.HTTPError:
+        logger.warning(
+            "Supabase profile read failed (table=%s, user_id=%s, status=%s, body=%s)",
+            table_name,
+            user_id_value,
+            response.status_code if "response" in locals() and response is not None else "unknown",
+            response.text[:250] if "response" in locals() and response is not None else "",
+        )
+        return defaults
+    except requests.RequestException as exc:
+        logger.warning(
+            "Supabase profile request error (table=%s, user_id=%s): %s",
+            table_name,
+            user_id_value,
+            exc,
+        )
+        return defaults
+    except Exception as exc:
+        logger.warning(
+            "Unexpected profile read error (table=%s, user_id=%s): %s",
+            table_name,
+            user_id_value,
+            exc,
+        )
         return defaults

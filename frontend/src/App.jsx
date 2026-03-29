@@ -6,10 +6,18 @@ import PortfolioAnalyzer from "./pages/PortfolioAnalyzer";
 import LifeEventPlanner from "./pages/LifeEventPlanner";
 import CouplePlanner from "./pages/CouplePlanner";
 import agentService from "./services/agentService";
-import { getActiveUserId } from "./services/userIdentity";
-
-const USERS_KEY = "amm_users";
-const SESSION_KEY = "amm_session";
+import {
+  getCurrentSessionUser,
+  signInWithEmail,
+  signOutSession,
+  signUpWithEmail,
+} from "./services/authService";
+import {
+  addTransaction as addSupabaseTransaction,
+  loadFinancialInputs,
+  listTransactions,
+  upsertFinancialInputs,
+} from "./services/supabaseDataService";
 
 function toNumber(value) {
   const parsed = Number(value);
@@ -258,82 +266,8 @@ function structureAgentExplanation(explanation) {
   };
 }
 
-function getUsers() {
-  const raw = localStorage.getItem(USERS_KEY);
-  if (!raw) return [];
-  try {
-    const users = JSON.parse(raw);
-    return Array.isArray(users) ? users : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-function getSession() {
-  const raw = localStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
-  try {
-    const session = JSON.parse(raw);
-    return session && session.email ? session : null;
-  } catch {
-    return null;
-  }
-}
-
-function setSession(user) {
-  localStorage.setItem(
-    SESSION_KEY,
-    JSON.stringify({ name: user.name, email: user.email }),
-  );
-}
-
-function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
-}
-
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-// Onboarding utilities
-const ONBOARDING_KEY = "amm_onboarding";
-
-function getOnboarding(email) {
-  const raw = localStorage.getItem(ONBOARDING_KEY);
-  if (!raw) return null;
-  try {
-    const data = JSON.parse(raw);
-    return data[email] || null;
-  } catch {
-    return null;
-  }
-}
-
-function saveOnboarding(email, data) {
-  const raw = localStorage.getItem(ONBOARDING_KEY);
-  let allData = {};
-  try {
-    allData = raw ? JSON.parse(raw) : {};
-  } catch {
-    allData = {};
-  }
-  allData[email] = data;
-  localStorage.setItem(ONBOARDING_KEY, JSON.stringify(allData));
-}
-
-function hasCompletedOnboarding(email) {
-  const data = getOnboarding(email);
-  return data && data.completed === true;
-}
-
-function markOnboardingComplete(email) {
-  const data = getOnboarding(email) || {};
-  data.completed = true;
-  saveOnboarding(email, data);
 }
 
 // Initial onboarding state
@@ -429,10 +363,9 @@ function getFirstIncompleteProfileSection(data) {
 
 function OnboardingPage({ user, onComplete }) {
   const navigate = useNavigate();
+  const userId = user?.user_id || user?.id;
   const [currentSection, setCurrentSection] = useState(0);
-  const [data, setData] = useState(
-    getOnboarding(user.email) || initialOnboarding,
-  );
+  const [data, setData] = useState(initialOnboarding);
   const [skipWarning, setSkipWarning] = useState(false);
 
   const sections = [
@@ -446,9 +379,28 @@ function OnboardingPage({ user, onComplete }) {
     "Risk Profile",
   ];
 
-  const handleNext = () => {
+  useEffect(() => {
+    const loadSavedInputs = async () => {
+      try {
+        const existing = await loadFinancialInputs(userId);
+        if (existing) {
+          setData(existing);
+        }
+      } catch {
+        // Keep empty onboarding state if Supabase read fails.
+      }
+    };
+    loadSavedInputs();
+  }, [userId]);
+
+  const handleNext = async () => {
+    try {
+      await upsertFinancialInputs(userId, data);
+    } catch {
+      // Keep UX uninterrupted when Supabase write fails mid-onboarding.
+    }
+
     if (currentSection < sections.length - 1) {
-      saveOnboarding(user.email, data);
       setCurrentSection(currentSection + 1);
     } else {
       handleComplete();
@@ -460,9 +412,17 @@ function OnboardingPage({ user, onComplete }) {
     handleNext();
   };
 
-  const handleComplete = () => {
-    markOnboardingComplete(user.email);
-    saveOnboarding(user.email, data);
+  const handleComplete = async () => {
+    const completedPayload = {
+      ...data,
+      completed: true,
+    };
+    try {
+      await upsertFinancialInputs(userId, completedPayload);
+    } catch {
+      // Let users proceed even if network write fails.
+    }
+
     onComplete();
     navigate("/");
   };
@@ -929,8 +889,12 @@ function OnboardingPage({ user, onComplete }) {
                   </button>
                   <button
                     className="btn-fill-later"
-                    onClick={() => {
-                      saveOnboarding(user.email, data);
+                    onClick={async () => {
+                      try {
+                        await upsertFinancialInputs(userId, data);
+                      } catch {
+                        // Continue with in-memory state if Supabase write fails.
+                      }
                       navigate("/");
                     }}
                   >
@@ -974,18 +938,20 @@ function LoginPage({ onLogin }) {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    const user = getUsers().find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase(),
-    );
-    if (!user || user.password !== password) {
-      setMessage("Invalid credentials. Try again.");
-      return;
+    setMessage("");
+
+    try {
+      const user = await signInWithEmail({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      onLogin(user);
+      navigate("/", { replace: true });
+    } catch (error) {
+      setMessage(error?.message || "Invalid credentials. Try again.");
     }
-    setSession(user);
-    onLogin(user);
-    navigate("/", { replace: true });
   };
 
   return (
@@ -1039,7 +1005,7 @@ function SignupPage({ onSignup }) {
   const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState("");
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     const normalized = email.trim().toLowerCase();
 
@@ -1056,18 +1022,28 @@ function SignupPage({ onSignup }) {
       return;
     }
 
-    const users = getUsers();
-    if (users.some((u) => u.email.toLowerCase() === normalized)) {
-      setMessage("This email is already registered. Please login.");
-      return;
-    }
+    try {
+      const { sessionUser, requiresEmailVerification } = await signUpWithEmail({
+        fullName: name.trim(),
+        email: normalized,
+        password,
+      });
 
-    const newUser = { name: name.trim(), email: normalized, password };
-    users.push(newUser);
-    saveUsers(users);
-    setSession(newUser);
-    onSignup(newUser);
-    navigate("/onboarding");
+      if (sessionUser) {
+        onSignup(sessionUser);
+        navigate("/onboarding", { replace: true });
+        return;
+      }
+
+      if (requiresEmailVerification) {
+        setMessage(
+          "Signup successful. Please verify your email, then login.",
+        );
+        navigate("/login", { replace: true });
+      }
+    } catch (error) {
+      setMessage(error?.message || "Signup failed. Please try again.");
+    }
   };
 
   return (
@@ -1134,12 +1110,8 @@ function SignupPage({ onSignup }) {
 
 function DashboardApp({ user, onLogout }) {
   const [activeScreen, setActiveScreen] = useState("dashboard");
-  const [profileData, setProfileData] = useState(
-    getOnboarding(user.email) || initialOnboarding,
-  );
-  const [finance, setFinance] = useState(() =>
-    buildFinanceFromProfile(getOnboarding(user.email) || initialOnboarding),
-  );
+  const [profileData, setProfileData] = useState(initialOnboarding);
+  const [finance, setFinance] = useState(() => buildFinanceFromProfile(initialOnboarding));
   const [chatInput, setChatInput] = useState("");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [currentProfileSection, setCurrentProfileSection] = useState(0);
@@ -1164,7 +1136,24 @@ function DashboardApp({ user, onLogout }) {
     desc: "",
     amount: "",
   });
-  const userId = getActiveUserId();
+  const userId = user?.user_id || user?.id;
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const loadSupabaseProfile = async () => {
+      try {
+        const existing = await loadFinancialInputs(userId);
+        if (existing) {
+          setProfileData(existing);
+        }
+      } catch {
+        // Keep default state if Supabase read fails.
+      }
+    };
+
+    loadSupabaseProfile();
+  }, [userId]);
 
   useEffect(() => {
     if (showProfileModal) {
@@ -1191,6 +1180,82 @@ function DashboardApp({ user, onLogout }) {
     });
   }, [profileData]);
 
+  useEffect(() => {
+    if (activeScreen !== "insights") {
+      return;
+    }
+
+    const loadInsights = async () => {
+      setInsightsLoading(true);
+      try {
+        const salary =
+          toNumber(profileData.income.baseSalary) +
+          toNumber(profileData.income.otherIncome) * 12;
+        const deductions = {
+          "80C": Math.max(0, toNumber(profileData.assets.ppf)),
+          "80D": Math.max(0, toNumber(profileData.insurance.healthInsurance)),
+        };
+
+        const [tax, fire, lifeEvent, couple] = await Promise.all([
+          agentService.getTaxAnalysis(userId, salary || null, deductions),
+          agentService.getFirePlan(
+            userId,
+            toNumber(profileData.goals?.[0]?.years)
+              ? toNumber(profileData.personalInfo.age) +
+                  toNumber(profileData.goals[0].years)
+              : null,
+          ),
+          agentService.getLifeEventPlan(
+            userId,
+            "Annual financial planning review",
+            false,
+          ),
+          agentService.getCouplePlan(userId, false),
+        ]);
+
+        setAgentInsights({ tax, fire, lifeEvent, couple });
+      } catch {
+        setAgentInsights({
+          tax: null,
+          fire: null,
+          lifeEvent: null,
+          couple: null,
+        });
+      } finally {
+        setInsightsLoading(false);
+      }
+    };
+
+    loadInsights();
+  }, [activeScreen, profileData, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const loadTransactionsFromSupabase = async () => {
+      try {
+        const rows = await listTransactions(userId);
+        const normalized = rows.map((row) => {
+          const amount = toNumber(row.amount);
+          return {
+            id: row.id,
+            desc: row.description || "Transaction",
+            category: row.category || "Other",
+            amount: row.txn_type === "debit" ? -Math.abs(amount) : Math.abs(amount),
+          };
+        });
+
+        setFinance((prev) => ({
+          ...prev,
+          transactions: normalized,
+        }));
+      } catch {
+        // Keep local transactions as fallback if Supabase read fails.
+      }
+    };
+
+    loadTransactionsFromSupabase();
+  }, [userId]);
   // Calculate profile completion percentage
   const profileCompletion = useMemo(() => {
     let filledFields = 0;
@@ -1596,7 +1661,7 @@ function DashboardApp({ user, onLogout }) {
     await sendChatQuery(alert.prompt);
   };
 
-  const addTransaction = (event) => {
+  const addTransaction = async (event) => {
     event.preventDefault();
     const amountRaw = Number(txnForm.amount);
     if (!txnForm.desc.trim() || amountRaw <= 0) return;
@@ -1609,6 +1674,24 @@ function DashboardApp({ user, onLogout }) {
           ? classifyExpenseCategory(txnForm.desc)
           : txnForm.category || "Other";
 
+    const txnPayload = {
+      desc: txnForm.desc.trim(),
+      category: selectedCategory,
+      amount: signed,
+    };
+
+    let persistedTxnId = null;
+    try {
+      const inserted = await addSupabaseTransaction(userId, txnPayload);
+      persistedTxnId = inserted?.id || null;
+    } catch {
+      appendAI({
+        answer: "Transaction saved locally, but cloud sync failed.",
+        reasoning: "Supabase write did not complete. Please verify RLS policies and table schema.",
+        impact: "You can continue using the app, but this entry may not appear in Supabase.",
+      });
+    }
+
     setFinance((prev) => ({
       ...prev,
       balance:
@@ -1616,7 +1699,12 @@ function DashboardApp({ user, onLogout }) {
       spent: signed < 0 ? prev.spent + Math.abs(signed) : prev.spent,
       transactions: [
         ...prev.transactions,
-        { desc: txnForm.desc.trim(), category: selectedCategory, amount: signed },
+        {
+          id: persistedTxnId,
+          desc: txnPayload.desc,
+          category: txnPayload.category,
+          amount: txnPayload.amount,
+        },
       ],
     }));
 
@@ -3232,8 +3320,12 @@ function DashboardApp({ user, onLogout }) {
               </button>
               <button
                 className="btn-secondary-action"
-                onClick={() => {
-                  saveOnboarding(user.email, profileData);
+                onClick={async () => {
+                  try {
+                    await upsertFinancialInputs(userId, profileData);
+                  } catch {
+                    // Keep modal UX non-blocking if Supabase write fails.
+                  }
                   setShowProfileModal(false);
                 }}
               >
@@ -3241,8 +3333,12 @@ function DashboardApp({ user, onLogout }) {
               </button>
               <button
                 className="btn-next"
-                onClick={() => {
-                  saveOnboarding(user.email, profileData);
+                onClick={async () => {
+                  try {
+                    await upsertFinancialInputs(userId, profileData);
+                  } catch {
+                    // Keep local state updated even if Supabase write fails.
+                  }
                   if (currentProfileSection < profileSections.length - 1) {
                     setCurrentProfileSection(currentProfileSection + 1);
                   } else {
@@ -3271,18 +3367,24 @@ export default function App() {
   const [sessionUser, setSessionUser] = useState(null);
 
   useEffect(() => {
-    const session = getSession();
-    if (session) {
-      const user = getUsers().find(
-        (u) => u.email.toLowerCase() === session.email.toLowerCase(),
-      );
-      if (user) setSessionUser(user);
-    }
+    const loadSession = async () => {
+      try {
+        const user = await getCurrentSessionUser();
+        setSessionUser(user || null);
+      } catch {
+        setSessionUser(null);
+      }
+    };
+
+    loadSession();
   }, []);
 
-  const logout = () => {
-    clearSession();
-    setSessionUser(null);
+  const logout = async () => {
+    try {
+      await signOutSession();
+    } finally {
+      setSessionUser(null);
+    }
   };
 
   return (

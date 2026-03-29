@@ -29,47 +29,57 @@ async function request(path, body, options = {}) {
 }
 
 function normalizeUserId(userId) {
-  if (userId === undefined || userId === null) {
-    return getActiveUserId();
+  if (userId === undefined || userId === null || userId === "") {
+    return null;
   }
-  const numericId = Number(userId);
-  return Number.isInteger(numericId) && numericId > 0 ? numericId : 1;
+
+  const normalized = String(userId).trim();
+  return normalized || null;
+}
+
+async function resolveUserId(userId) {
+  return normalizeUserId(userId) || (await getActiveUserId());
 }
 
 async function askAI(query, userId = null, userContext = null) {
+  const resolvedUserId = await resolveUserId(userId);
   return request("/ask", {
-    user_id: normalizeUserId(userId),
+    user_id: resolvedUserId,
     query,
     user_context: userContext,
   });
 }
 
 async function getFirePlan(userId = null, retirementAge) {
+  const resolvedUserId = await resolveUserId(userId);
   return request("/feature/fire", {
-    user_id: normalizeUserId(userId),
+    user_id: resolvedUserId,
     retirement_age: retirementAge ?? null,
   });
 }
 
 async function getTaxAnalysis(userId = null, salary, deductions) {
+  const resolvedUserId = await resolveUserId(userId);
   return request("/feature/tax", {
-    user_id: normalizeUserId(userId),
+    user_id: resolvedUserId,
     salary: salary ?? null,
     deductions: deductions ?? null,
   });
 }
 
 async function getLifeEventPlan(userId = null, event, useAI = false) {
+  const resolvedUserId = await resolveUserId(userId);
   return request("/feature/life-event", {
-    user_id: normalizeUserId(userId),
+    user_id: resolvedUserId,
     event,
     use_ai: useAI,
   });
 }
 
 async function getCouplePlan(userId = null, useAI = false) {
+  const resolvedUserId = await resolveUserId(userId);
   return request("/feature/couple", {
-    user_id: normalizeUserId(userId),
+    user_id: resolvedUserId,
     use_ai: useAI,
   });
 }

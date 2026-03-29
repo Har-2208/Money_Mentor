@@ -237,7 +237,7 @@ Use backend\.env (see backend\.env.example):
 - FIRE_ANNUAL_RETURN (optional)
 - FIRE_SAFE_WITHDRAWAL_RATE (optional)
 - SUPABASE_URL (optional)
-- SUPABASE_SERVICE_ROLE_KEY (optional)
+- SUPABASE_SECRET_KEY (optional)
 - SUPABASE_PROFILE_TABLE (optional)
 
 ## Notes

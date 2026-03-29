@@ -12,8 +12,9 @@ const apiClient = axios.create({
 
 async function generateFirePlan(formData) {
   try {
+    const userId = await getActiveUserId();
     const response = await apiClient.post("/feature/fire", {
-      user_id: getActiveUserId(),
+      user_id: userId,
       retirement_age: formData?.retirement_age ?? null,
       current_age: formData?.current_age ?? null,
       monthly_income: formData?.monthly_income ?? null,

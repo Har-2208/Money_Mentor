@@ -340,7 +340,7 @@ def _build_couple_plan(
 
 
 def run_fire_feature(
-    user_id: int,
+    user_id: str | int,
     retirement_age: int | None = None,
     profile_overrides: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
@@ -353,7 +353,7 @@ def run_fire_feature(
     return recalculate_fire_plan_on_retirement_age_change(base, user_data, behavior, retirement_age)
 
 
-def run_tax_feature(user_id: int, salary: float | None = None, deductions: Dict[str, float] | None = None) -> Dict[str, Any]:
+def run_tax_feature(user_id: str | int, salary: float | None = None, deductions: Dict[str, float] | None = None) -> Dict[str, Any]:
     user_data = get_user_data(user_id)
     resolved_salary = salary if salary is not None else _to_float(user_data.get("income", {}).get("salary"), 0.0)
     resolved_deductions = deductions if deductions is not None else user_data.get("tax", {}).get("deductions", {})
@@ -361,7 +361,7 @@ def run_tax_feature(user_id: int, salary: float | None = None, deductions: Dict[
 
 
 def run_life_event_feature(
-    user_id: int,
+    user_id: str | int,
     event: str,
     profile_overrides: Dict[str, Any] | None = None,
     use_ai: bool = False,
@@ -378,7 +378,7 @@ def run_life_event_feature(
 
 
 def run_couple_feature(
-    user_id: int,
+    user_id: str | int,
     profile_overrides: Dict[str, Any] | None = None,
     use_ai: bool = False,
 ) -> Dict[str, Any]:
@@ -390,7 +390,7 @@ def run_portfolio_feature(file_bytes: bytes) -> Dict[str, Any]:
     return run_portfolio_xray_crew(file_bytes)
 
 
-def orchestrator(query: str, user_id: int, user_context: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def orchestrator(query: str, user_id: str | int, user_context: Dict[str, Any] | None = None) -> Dict[str, Any]:
     intent = detect_intent(query)
     user_data = get_user_data(user_id)
     user_data = _deep_merge(user_data, _sanitize_user_context(user_context))

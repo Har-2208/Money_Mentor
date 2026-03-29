@@ -12,13 +12,14 @@ const apiClient = axios.create({
 
 async function calculateTax(formData) {
   try {
+    const userId = await getActiveUserId();
     const deductions = {
       "80C": Number(formData?.deductions_80C || 0),
       "80D": Number(formData?.deductions_80D || 0),
       other: Number(formData?.other_deductions || 0),
     };
     const response = await apiClient.post("/feature/tax", {
-      user_id: getActiveUserId(),
+      user_id: userId,
       salary: Number(formData?.annual_salary || 0),
       deductions,
     });

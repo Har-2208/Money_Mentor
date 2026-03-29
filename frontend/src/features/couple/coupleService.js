@@ -12,8 +12,9 @@ const apiClient = axios.create({
 
 async function generatePlan(formData) {
   try {
+    const userId = await getActiveUserId();
     const response = await apiClient.post("/feature/couple", {
-      user_id: getActiveUserId(),
+      user_id: userId,
       partner1_income: formData?.partner1_income ?? null,
       partner1_expenses: formData?.partner1_expenses ?? null,
       partner1_investments: formData?.partner1_investments ?? null,

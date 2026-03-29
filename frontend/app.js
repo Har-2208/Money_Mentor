@@ -89,7 +89,10 @@ function getSession() {
 }
 
 function setSession(user) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ name: user.name, email: user.email }));
+  localStorage.setItem(
+    SESSION_KEY,
+    JSON.stringify({ name: user.name, email: user.email, user_id: user.user_id }),
+  );
 }
 
 function clearSession() {
@@ -115,8 +118,28 @@ function ensureSeedUser() {
   const users = getUsers();
   const exists = users.some((u) => u.email.toLowerCase() === "demo@moneymentor.app");
   if (!exists) {
-    users.push({ name: "Demo User", email: "demo@moneymentor.app", password: "mentor123" });
+    const user_id =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `demo-${Date.now()}`;
+    users.push({ user_id, name: "Demo User", email: "demo@moneymentor.app", password: "mentor123" });
     saveUsers(users);
+    return;
+  }
+
+  const updatedUsers = users.map((u) => {
+    if (u?.email?.toLowerCase() !== "demo@moneymentor.app" || u?.user_id) {
+      return u;
+    }
+    const user_id =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `demo-${Date.now()}`;
+    return { ...u, user_id };
+  });
+
+  if (JSON.stringify(updatedUsers) !== JSON.stringify(users)) {
+    saveUsers(updatedUsers);
   }
 }
 

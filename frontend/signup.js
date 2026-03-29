@@ -1,5 +1,21 @@
-const USERS_KEY = "amm_users";
-const SESSION_KEY = "amm_session";
+const SUPABASE_URL =
+  window.SUPABASE_URL ||
+  "https://otnhisnarvvihdkieqce.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY =
+  window.SUPABASE_PUBLISHABLE_KEY ||
+  "sb_publishable_chW2Q-LRch_45SUiaibaHQ_qYXJx3K9";
+
+const supabase = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  },
+);
 
 const el = {
   form: document.getElementById("signup-form"),
@@ -10,26 +26,6 @@ const el = {
   message: document.getElementById("signup-message"),
 };
 
-function getUsers() {
-  const raw = localStorage.getItem(USERS_KEY);
-  if (!raw) return [];
-
-  try {
-    const users = JSON.parse(raw);
-    return Array.isArray(users) ? users : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-function setSession(user) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ name: user.name, email: user.email }));
-}
-
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -39,7 +35,24 @@ function setMessage(text, success = false) {
   el.message.classList.toggle("success", success);
 }
 
-el.form.addEventListener("submit", (event) => {
+async function ensureProfile(user, fullName) {
+  if (!user?.id) return;
+
+  const { error } = await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      full_name: fullName,
+      email: user.email,
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    throw error;
+  }
+}
+
+el.form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const name = el.name.value.trim();
@@ -62,21 +75,46 @@ el.form.addEventListener("submit", (event) => {
     return;
   }
 
-  const users = getUsers();
-  const exists = users.some((u) => u.email.toLowerCase() === email);
-  if (exists) {
-    setMessage("This email is already registered. Please login.");
-    return;
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: name,
+        },
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    const authUser = data?.user;
+    if (!authUser) {
+      setMessage("Signup succeeded. Please verify your email, then login.", true);
+      return;
+    }
+
+    try {
+      await ensureProfile(authUser, name);
+    } catch {
+      // Profile row write can fail if email confirmation is pending and no session exists.
+    }
+
+    if (!data?.session) {
+      setMessage("Signup successful. Verify your email, then login.", true);
+      setTimeout(() => {
+        window.location.href = "index.html";
+      }, 900);
+      return;
+    }
+
+    setMessage("Account created. Redirecting to dashboard...", true);
+    setTimeout(() => {
+      window.location.href = "index.html";
+    }, 500);
+  } catch (error) {
+    setMessage(error?.message || "Signup failed. Please try again.");
   }
-
-  users.push({ name, email, password });
-  saveUsers(users);
-  
-  const newUser = { name, email, password };
-  setSession(newUser);
-
-  setMessage("Account created. Redirecting to dashboard...", true);
-  setTimeout(() => {
-    window.location.href = "index.html";
-  }, 500);
 });

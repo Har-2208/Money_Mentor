@@ -8,7 +8,7 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def get_behavior_profile(user_id: int, user_data: Dict[str, Any] | None = None) -> dict:
+def get_behavior_profile(user_id: str | int, user_data: Dict[str, Any] | None = None) -> dict:
     payload = user_data or {}
     annual_income = _safe_float(payload.get("income", {}).get("salary"), 0.0)
     monthly_expenses = _safe_float(payload.get("expenses", {}).get("total"), 0.0)
