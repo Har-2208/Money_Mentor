@@ -14,7 +14,7 @@ if (!supabaseUrl || !supabasePublishableKey) {
 }
 
 export const supabase = createClient(
-  supabaseUrl || "ttps://otnhisnarvvihdkieqce.supabase.co",
+  supabaseUrl || "https://otnhisnarvvihdkieqce.supabase.co",
   supabasePublishableKey || "sb_publishable_chW2Q-LRch_45SUiaibaHQ_qYXJx3K9",
   {
     auth: {

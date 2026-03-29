@@ -14,6 +14,11 @@ function toNullableNumber(value) {
 }
 
 function getCompletionPercent(onboarding) {
+  const isProvided = (value) => {
+    if (value === undefined || value === null) return false;
+    return String(value).trim() !== "";
+  };
+
   const checks = [
     onboarding?.personalInfo?.age,
     onboarding?.personalInfo?.city,
@@ -26,7 +31,7 @@ function getCompletionPercent(onboarding) {
     onboarding?.riskProfile,
   ];
 
-  const filled = checks.filter((x) => String(x ?? "").trim() !== "").length;
+  const filled = checks.filter((x) => isProvided(x)).length;
   return Math.round((filled / checks.length) * 100);
 }
 
@@ -94,11 +99,22 @@ export async function listTransactions(userId) {
   return data || [];
 }
 
-function firstGoal(goals) {
-  if (!Array.isArray(goals) || goals.length === 0) {
-    return { type: "Retirement", targetAmount: "", years: "" };
-  }
-  return goals[0];
+const DEFAULT_GOAL_SLOTS = ["Retirement", "Car", "Travel"];
+
+function buildGoalsFromRows(goals) {
+  const source = Array.isArray(goals) ? goals : [];
+  const byType = new Map(
+    source.map((goal) => [String(goal?.goal_type || "").toLowerCase(), goal]),
+  );
+
+  return DEFAULT_GOAL_SLOTS.map((slot) => {
+    const hit = byType.get(slot.toLowerCase());
+    return {
+      type: slot,
+      targetAmount: hit?.target_amount ?? "",
+      years: hit?.target_years ?? "",
+    };
+  });
 }
 
 function buildOnboardingFromRows({
@@ -110,7 +126,7 @@ function buildOnboardingFromRows({
   insurance,
   goals,
 }) {
-  const goal = firstGoal(goals);
+  const normalizedGoals = buildGoalsFromRows(goals);
 
   return {
     personalInfo: {
@@ -149,15 +165,7 @@ function buildOnboardingFromRows({
       healthInsurance: insurance?.health_insurance ?? "",
       lifeInsurance: insurance?.life_insurance ?? "",
     },
-    goals: [
-      {
-        type: goal?.goal_type ?? "Retirement",
-        targetAmount: goal?.target_amount ?? "",
-        years: goal?.target_years ?? "",
-      },
-      { type: "Car", targetAmount: "", years: "" },
-      { type: "Travel", targetAmount: "", years: "" },
-    ],
+    goals: normalizedGoals,
     riskProfile:
       onboarding?.risk_profile && typeof onboarding.risk_profile === "string"
         ? onboarding.risk_profile[0].toUpperCase() + onboarding.risk_profile.slice(1)
@@ -209,11 +217,12 @@ export async function loadFinancialInputs(userId) {
         .from("goals")
         .select("goal_type, target_amount, target_years")
         .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1),
+        .limit(10),
     ]);
 
-  const firstError = [
+  // Do not fail the entire prefill if one table query fails.
+  // This keeps onboarding data visible even with partial schema/table issues.
+  const errors = [
     onboardingRes.error,
     expenseRes.error,
     incomeRes.error,
@@ -221,10 +230,10 @@ export async function loadFinancialInputs(userId) {
     liabilityRes.error,
     insuranceRes.error,
     goalsRes.error,
-  ].find(Boolean);
+  ].filter(Boolean);
 
-  if (firstError) {
-    throw firstError;
+  if (errors.length > 0) {
+    console.warn("Partial Supabase read failure in loadFinancialInputs", errors);
   }
 
   const hasAnyData =
@@ -241,12 +250,12 @@ export async function loadFinancialInputs(userId) {
   }
 
   return buildOnboardingFromRows({
-    onboarding: onboardingRes.data,
-    expense: expenseRes.data,
-    income: incomeRes.data,
-    asset: assetRes.data,
-    liability: liabilityRes.data,
-    insurance: insuranceRes.data,
+    onboarding: onboardingRes.data || null,
+    expense: expenseRes.data || null,
+    income: incomeRes.data || null,
+    asset: assetRes.data || null,
+    liability: liabilityRes.data || null,
+    insurance: insuranceRes.data || null,
     goals: goalsRes.data || [],
   });
 }
@@ -275,8 +284,8 @@ export async function upsertFinancialInputs(userId, onboarding) {
 
   const expensePayload = {
     user_id: userId,
-    salary: toNumber(onboarding?.income?.baseSalary, 0),
-    bonus: toNumber(onboarding?.income?.bonus, 0),
+    salary: toNullableNumber(onboarding?.income?.baseSalary),
+    bonus: toNullableNumber(onboarding?.income?.bonus),
     monthly_expenses: expenseTotal,
     retirement_age: toNullableNumber(onboarding?.goals?.[0]?.years)
       ? toNumber(onboarding?.personalInfo?.age, 0) +
@@ -291,66 +300,67 @@ export async function upsertFinancialInputs(userId, onboarding) {
       toNumber(onboarding?.assets?.stocks),
     monthly_investment: 0,
     current_allocation: {
-      mutual_funds: toNumber(onboarding?.assets?.mutualFunds),
-      ppf: toNumber(onboarding?.assets?.ppf),
-      stocks: toNumber(onboarding?.assets?.stocks),
-      fd: toNumber(onboarding?.assets?.fd),
-      cash: toNumber(onboarding?.assets?.cash),
+      mutual_funds: toNullableNumber(onboarding?.assets?.mutualFunds),
+      ppf: toNullableNumber(onboarding?.assets?.ppf),
+      stocks: toNullableNumber(onboarding?.assets?.stocks),
+      fd: toNullableNumber(onboarding?.assets?.fd),
+      cash: toNullableNumber(onboarding?.assets?.cash),
     },
     deductions: {
-      ppf: toNumber(onboarding?.assets?.ppf),
-      health_insurance: toNumber(onboarding?.insurance?.healthInsurance),
+      ppf: toNullableNumber(onboarding?.assets?.ppf),
+      health_insurance: toNullableNumber(onboarding?.insurance?.healthInsurance),
     },
     partner_salary: 0,
     partner_deductions_80c: 0,
-    rent: toNumber(onboarding?.expenses?.rent),
-    food: toNumber(onboarding?.expenses?.food),
-    travel: toNumber(onboarding?.expenses?.travel),
-    subscriptions: toNumber(onboarding?.expenses?.subscriptions),
-    misc: toNumber(onboarding?.expenses?.misc),
+    rent: toNullableNumber(onboarding?.expenses?.rent),
+    food: toNullableNumber(onboarding?.expenses?.food),
+    travel: toNullableNumber(onboarding?.expenses?.travel),
+    subscriptions: toNullableNumber(onboarding?.expenses?.subscriptions),
+    misc: toNullableNumber(onboarding?.expenses?.misc),
   };
 
   const incomePayload = {
     user_id: userId,
-    base_salary: toNumber(onboarding?.income?.baseSalary),
-    hra: toNumber(onboarding?.income?.hra),
-    other_allowances: toNumber(onboarding?.income?.otherAllowances),
-    bonus: toNumber(onboarding?.income?.bonus),
-    other_income: toNumber(onboarding?.income?.otherIncome),
+    base_salary: toNullableNumber(onboarding?.income?.baseSalary),
+    hra: toNullableNumber(onboarding?.income?.hra),
+    other_allowances: toNullableNumber(onboarding?.income?.otherAllowances),
+    bonus: toNullableNumber(onboarding?.income?.bonus),
+    other_income: toNullableNumber(onboarding?.income?.otherIncome),
   };
 
   const assetPayload = {
     user_id: userId,
     snapshot_date: snapshotDate,
-    cash: toNumber(onboarding?.assets?.cash),
-    fd: toNumber(onboarding?.assets?.fd),
-    mutual_funds: toNumber(onboarding?.assets?.mutualFunds),
-    ppf: toNumber(onboarding?.assets?.ppf),
-    stocks: toNumber(onboarding?.assets?.stocks),
+    cash: toNullableNumber(onboarding?.assets?.cash),
+    fd: toNullableNumber(onboarding?.assets?.fd),
+    mutual_funds: toNullableNumber(onboarding?.assets?.mutualFunds),
+    ppf: toNullableNumber(onboarding?.assets?.ppf),
+    stocks: toNullableNumber(onboarding?.assets?.stocks),
   };
 
   const liabilityPayload = {
     user_id: userId,
     snapshot_date: snapshotDate,
-    home_loan: toNumber(onboarding?.liabilities?.homeLoan),
-    emi: toNumber(onboarding?.liabilities?.emi),
-    credit_card_dues: toNumber(onboarding?.liabilities?.creditCardDues),
+    home_loan: toNullableNumber(onboarding?.liabilities?.homeLoan),
+    emi: toNullableNumber(onboarding?.liabilities?.emi),
+    credit_card_dues: toNullableNumber(onboarding?.liabilities?.creditCardDues),
   };
 
   const insurancePayload = {
     user_id: userId,
     snapshot_date: snapshotDate,
-    health_insurance: toNumber(onboarding?.insurance?.healthInsurance),
-    life_insurance: toNumber(onboarding?.insurance?.lifeInsurance),
+    health_insurance: toNullableNumber(onboarding?.insurance?.healthInsurance),
+    life_insurance: toNullableNumber(onboarding?.insurance?.lifeInsurance),
   };
 
-  const goal = onboarding?.goals?.[0] || {};
-  const goalPayload = {
-    user_id: userId,
-    goal_type: goal?.type || "Retirement",
-    target_amount: toNumber(goal?.targetAmount),
-    target_years: toNullableNumber(goal?.years),
-  };
+  const goalPayloads = (onboarding?.goals || [])
+    .map((goal) => ({
+      user_id: userId,
+      goal_type: goal?.type || "Retirement",
+      target_amount: toNullableNumber(goal?.targetAmount),
+      target_years: toNullableNumber(goal?.years),
+    }))
+    .filter((goal) => String(goal.goal_type || "").trim() !== "");
 
   const monthlyBudgetPayload = {
     user_id: userId,
@@ -378,9 +388,11 @@ export async function upsertFinancialInputs(userId, onboarding) {
     supabase.from("insurance_snapshots").upsert(insurancePayload, {
       onConflict: "user_id,snapshot_date",
     }),
-    supabase.from("goals").upsert(goalPayload, {
-      onConflict: "user_id,goal_type",
-    }),
+    goalPayloads.length
+      ? supabase.from("goals").upsert(goalPayloads, {
+          onConflict: "user_id,goal_type",
+        })
+      : Promise.resolve({ error: null }),
     supabase.from("monthly_budgets").upsert(monthlyBudgetPayload, {
       onConflict: "user_id,month",
     }),

@@ -40,11 +40,20 @@ export default function CoupleResult({ result }) {
     "total_expenses",
   ]);
   const netSavings = getValue(analysis, ["net_savings", "savings"]);
+  const monthlySurplus = getValue(analysis, ["monthly_surplus"]);
+  const savingsRate = getValue(analysis, ["savings_rate"]);
+  const emergencyTarget = getValue(analysis, ["emergency_fund_target"]);
+  const emergencyGap = getValue(analysis, ["emergency_fund_gap"]);
+  const monthlyEmergency = getValue(analysis, [
+    "recommended_monthly_emergency_contribution",
+  ]);
+  const monthlyInvestment = getValue(analysis, ["recommended_monthly_investment"]);
+  const warnings = normalizeList(getValue(analysis, ["warnings"]));
   const investmentStrategy = normalizeList(
     getValue(analysis, ["investment_strategy", "strategy"]),
   );
-  const taxSuggestions = normalizeList(
-    getValue(analysis, ["tax_suggestions", "tax_optimization"]),
+  const budgetSuggestions = normalizeList(
+    getValue(analysis, ["budget_suggestions", "cashflow_suggestions"]),
   );
   const goalStrategy = normalizeList(
     getValue(analysis, ["goal_strategy", "goals"]),
@@ -129,6 +138,35 @@ export default function CoupleResult({ result }) {
           <p className="couple-metric-label">Net Savings</p>
           <p className="couple-metric-value">{formatINR(netSavings)}</p>
         </div>
+        <div className="couple-metric-card">
+          <p className="couple-metric-label">Monthly Surplus</p>
+          <p className="couple-metric-value">{formatINR(monthlySurplus)}</p>
+        </div>
+        <div className="couple-metric-card">
+          <p className="couple-metric-label">Savings Rate</p>
+          <p className="couple-metric-value">
+            {`${Math.max(0, Number(savingsRate || 0) * 100).toFixed(1)}%`}
+          </p>
+        </div>
+      </div>
+
+      <div className="couple-metrics-grid">
+        <div className="couple-metric-card">
+          <p className="couple-metric-label">Emergency Fund Target</p>
+          <p className="couple-metric-value">{formatINR(emergencyTarget)}</p>
+        </div>
+        <div className="couple-metric-card">
+          <p className="couple-metric-label">Emergency Gap</p>
+          <p className="couple-metric-value">{formatINR(emergencyGap)}</p>
+        </div>
+        <div className="couple-metric-card">
+          <p className="couple-metric-label">Monthly Emergency Top-up</p>
+          <p className="couple-metric-value">{formatINR(monthlyEmergency)}</p>
+        </div>
+        <div className="couple-metric-card">
+          <p className="couple-metric-label">Monthly Investment Capacity</p>
+          <p className="couple-metric-value">{formatINR(monthlyInvestment)}</p>
+        </div>
       </div>
 
       <div className="couple-chip-row">
@@ -158,12 +196,12 @@ export default function CoupleResult({ result }) {
           </ul>
         </section>
         <section className="couple-strategy-card">
-          <p className="couple-strategy-title">💸 Tax Optimization</p>
+          <p className="couple-strategy-title">💸 Cashflow Optimization</p>
           <ul className="couple-list">
-            {taxSuggestions.length === 0 && (
-              <li>Explore joint deductions and insurance coverage.</li>
+            {budgetSuggestions.length === 0 && (
+              <li>Set shared category limits and automate monthly savings.</li>
             )}
-            {taxSuggestions.map((item) => (
+            {budgetSuggestions.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
@@ -179,6 +217,16 @@ export default function CoupleResult({ result }) {
             ))}
           </ul>
         </section>
+        {warnings.length > 0 && (
+          <section className="couple-strategy-card">
+            <p className="couple-strategy-title">⚠️ Key Warnings</p>
+            <ul className="couple-list">
+              {warnings.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </div>
   );

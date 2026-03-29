@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const initialValues = {
   partner1_income: "",
@@ -7,6 +7,7 @@ const initialValues = {
   partner2_income: "",
   partner2_expenses: "",
   partner2_investments: "",
+  partner2_email: "",
   shared_goals: "",
   risk_preference: "moderate",
 };
@@ -17,9 +18,28 @@ const riskOptions = [
   { value: "aggressive", label: "Aggressive" },
 ];
 
-export default function CoupleForm({ onSubmit }) {
+export default function CoupleForm({
+  onSubmit,
+  initialValues,
+  onImportPartner,
+  importBusy,
+  importError,
+}) {
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
+  const [localImportError, setLocalImportError] = useState("");
+
+  useEffect(() => {
+    if (!initialValues) return;
+    setValues((prev) => ({
+      ...prev,
+      ...initialValues,
+      partner2_email:
+        initialValues.partner2_email !== undefined
+          ? initialValues.partner2_email
+          : prev.partner2_email,
+    }));
+  }, [initialValues]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -72,6 +92,20 @@ export default function CoupleForm({ onSubmit }) {
         shared_goals: values.shared_goals,
         risk_preference: values.risk_preference,
       });
+    }
+  };
+
+  const handleImportPartner = async () => {
+    const email = String(values.partner2_email || "").trim();
+    if (!email) {
+      setLocalImportError("Enter partner email to import profile.");
+      return;
+    }
+    setLocalImportError("");
+    try {
+      await onImportPartner?.(email);
+    } catch (error) {
+      setLocalImportError(error?.message || "Failed to import partner profile.");
     }
   };
 
@@ -143,6 +177,30 @@ export default function CoupleForm({ onSubmit }) {
 
         <div className="couple-panel">
           <h3>Partner 2</h3>
+          <label className="couple-label">
+            Partner Email
+            <div className="couple-import-row">
+              <input
+                type="email"
+                name="partner2_email"
+                value={values.partner2_email}
+                onChange={handleChange}
+                className="couple-input"
+                placeholder="partner@email.com"
+              />
+              <button
+                type="button"
+                className="couple-button secondary"
+                onClick={handleImportPartner}
+                disabled={!!importBusy}
+              >
+                {importBusy ? "Importing..." : "Import Profile"}
+              </button>
+            </div>
+            {(localImportError || importError) && (
+              <span className="couple-error-text">{localImportError || importError}</span>
+            )}
+          </label>
           <label className="couple-label">
             Income
             <input
@@ -234,7 +292,7 @@ export default function CoupleForm({ onSubmit }) {
           Generate Plan
         </button>
         <p className="couple-helper">
-          We only use your inputs for this session.
+          Partner profile import uses registered data and fills this form automatically.
         </p>
       </div>
     </form>

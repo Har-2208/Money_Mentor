@@ -35,6 +35,23 @@ async function generatePlan(formData) {
   }
 }
 
+async function importPartnerProfile(email) {
+  try {
+    const response = await apiClient.post("/feature/couple/import-profile", {
+      email,
+    });
+    return response.data;
+  } catch (error) {
+    const message =
+      error?.response?.data?.detail ||
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to import partner profile.";
+    throw new Error(message);
+  }
+}
+
 export default {
   generatePlan,
+  importPartnerProfile,
 };

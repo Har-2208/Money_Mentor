@@ -11,6 +11,13 @@ This project uses a hybrid model:
 3. Confirm these tables exist at minimum:
    - profiles
    - onboarding_profiles
+   - expense_profiles
+   - income_details
+   - asset_snapshots
+   - liability_snapshots
+   - insurance_snapshots
+   - goals
+   - monthly_budgets
    - transactions
 4. Confirm RLS is enabled and owner-only policies are active.
 
@@ -88,9 +95,7 @@ npm run dev
 
 Ensure frontend feature pages still call backend endpoints:
 - /feature/fire
-- /feature/tax
-- /feature/life-event
 - /feature/couple
-- /feature/portfolio-xray
+- /feature/couple/import-profile
 
 These stay backend-driven for business logic and AI orchestration.

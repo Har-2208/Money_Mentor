@@ -16,17 +16,14 @@ Money_Mentor/
 │  │  ├─ compliance_agent.py
 │  │  ├─ explanation_agent.py
 │  │  ├─ orshestrator.py
-│  │  ├─ portfolio_xray_crew.py
-│  │  └─ tax_wizard_crew.py
+│  │  └─ ...
 │  ├─ db/
 │  │  ├─ supabase_client.py
 │  │  └─ user_repository.py
 │  ├─ services/
 │  │  └─ gemini_services.py
 │  └─ tools/
-│     ├─ portfolio_analyzer.py
-│     ├─ sip_calculator.py
-│     └─ tax_calculator.py
+│     └─ sip_calculator.py
 ├─ frontend/
 │  ├─ package.json
 │  ├─ index.html
@@ -137,10 +134,8 @@ Base URL: http://127.0.0.1:8000
 - GET /
 - POST /ask
 - POST /feature/fire
-- POST /feature/tax
-- POST /feature/life-event
 - POST /feature/couple
-- POST /feature/portfolio-xray
+- POST /feature/couple/import-profile
 
 ## Example Request Payloads
 
@@ -171,37 +166,7 @@ POST /feature/fire
 }
 ```
 
-### 3) Tax Analysis
-
-POST /feature/tax
-
-```json
-{
-  "user_id": 1,
-  "salary": 1800000,
-  "deductions": {
-    "80C": 150000,
-    "80D": 25000,
-    "other": 20000
-  }
-}
-```
-
-### 4) Life Event Advisor
-
-POST /feature/life-event
-
-```json
-{
-  "user_id": 1,
-  "event": "marriage",
-  "annual_income": 1800000,
-  "monthly_expenses": 70000,
-  "bonus": 250000
-}
-```
-
-### 5) Couple Planner
+### 3) Couple Planner
 
 POST /feature/couple
 
@@ -219,13 +184,15 @@ POST /feature/couple
 }
 ```
 
-### 6) Portfolio X-Ray
+### 4) Import Partner Profile (Couple Planner)
 
-POST /feature/portfolio-xray
+POST /feature/couple/import-profile
 
-- Content-Type: multipart/form-data
-- Field name: file
-- File: CAMS PDF statement
+```json
+{
+  "email": "partner@example.com"
+}
+```
 
 ## Environment Variables
 
@@ -256,6 +223,6 @@ Use backend\.env (see backend\.env.example):
 - Verify GEMINI_API_KEY in backend\.env.
 - Restart backend after changing environment variables.
 
-3. PDF portfolio upload fails:
-- Confirm file is a readable PDF.
-- Check backend logs for parser exceptions.
+3. Partner profile import fails:
+- Ensure partner has a registered account.
+- Confirm partner email exists in `profiles` table.

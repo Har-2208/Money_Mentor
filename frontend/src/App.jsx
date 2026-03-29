@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, Link, useNavigate } from "react-router-dom";
 import FirePlanner from "./pages/fireplanner";
-import TaxPlanner from "./pages/TaxPlanner";
-import PortfolioAnalyzer from "./pages/PortfolioAnalyzer";
-import LifeEventPlanner from "./pages/LifeEventPlanner";
 import CouplePlanner from "./pages/CouplePlanner";
 import agentService from "./services/agentService";
 import {
@@ -55,7 +52,6 @@ function createEmptyFinance() {
     emergencyFund: 0,
     emergencyFundTarget: 0,
     debt: 0,
-    taxSavings: 0,
     retirement: 0,
     transactions: [],
   };
@@ -128,7 +124,6 @@ function buildFinanceFromProfile(profile) {
     emergencyFund: savings,
     emergencyFundTarget: monthlyExpenses * 6,
     debt,
-    taxSavings: 0,
     retirement: investments,
     transactions: [],
   };
@@ -317,47 +312,164 @@ const initialOnboarding = {
   completed: false,
 };
 
+const ONBOARDING_CACHE_PREFIX = "moneymentor_onboarding_";
+const ONBOARDING_LAST_CACHE_KEY = "moneymentor_onboarding_last";
+
+function onboardingCacheKey(userId) {
+  return `${ONBOARDING_CACHE_PREFIX}${userId || "anon"}`;
+}
+
+function readCachedOnboarding(userId) {
+  try {
+    const keysToTry = [
+      onboardingCacheKey(userId),
+      onboardingCacheKey("anon"),
+      ONBOARDING_LAST_CACHE_KEY,
+    ];
+
+    for (const key of keysToTry) {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return parsed;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedOnboarding(userId, payload) {
+  try {
+    window.localStorage.setItem(onboardingCacheKey(userId), JSON.stringify(payload));
+    window.localStorage.setItem(ONBOARDING_LAST_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore localStorage write failures.
+  }
+}
+
+function isProvided(value) {
+  if (value === undefined || value === null) return false;
+  return String(value).trim() !== "";
+}
+
+function mergeOnboardingData(primary, fallback) {
+  if (!primary && !fallback) return initialOnboarding;
+  if (!primary) return fallback;
+  if (!fallback) return primary;
+
+  const pick = (a, b) => (isProvided(a) ? a : b);
+
+  const primaryGoals = Array.isArray(primary.goals) ? primary.goals : [];
+  const fallbackGoals = Array.isArray(fallback.goals) ? fallback.goals : [];
+  const goalCount = Math.max(primaryGoals.length, fallbackGoals.length, 3);
+
+  const goals = Array.from({ length: goalCount }, (_, idx) => {
+    const pg = primaryGoals[idx] || {};
+    const fg = fallbackGoals[idx] || {};
+    return {
+      type: pick(pg.type, fg.type) || initialOnboarding.goals[idx]?.type || `Goal ${idx + 1}`,
+      targetAmount: pick(pg.targetAmount, fg.targetAmount) ?? "",
+      years: pick(pg.years, fg.years) ?? "",
+    };
+  });
+
+  return {
+    personalInfo: {
+      age: pick(primary.personalInfo?.age, fallback.personalInfo?.age) ?? "",
+      city: pick(primary.personalInfo?.city, fallback.personalInfo?.city) ?? "",
+      maritalStatus:
+        pick(primary.personalInfo?.maritalStatus, fallback.personalInfo?.maritalStatus) ?? "",
+      dependents:
+        pick(primary.personalInfo?.dependents, fallback.personalInfo?.dependents) ?? "",
+    },
+    income: {
+      baseSalary: pick(primary.income?.baseSalary, fallback.income?.baseSalary) ?? "",
+      hra: pick(primary.income?.hra, fallback.income?.hra) ?? "",
+      otherAllowances:
+        pick(primary.income?.otherAllowances, fallback.income?.otherAllowances) ?? "",
+      bonus: pick(primary.income?.bonus, fallback.income?.bonus) ?? "",
+      otherIncome: pick(primary.income?.otherIncome, fallback.income?.otherIncome) ?? "",
+    },
+    expenses: {
+      rent: pick(primary.expenses?.rent, fallback.expenses?.rent) ?? "",
+      food: pick(primary.expenses?.food, fallback.expenses?.food) ?? "",
+      travel: pick(primary.expenses?.travel, fallback.expenses?.travel) ?? "",
+      subscriptions:
+        pick(primary.expenses?.subscriptions, fallback.expenses?.subscriptions) ?? "",
+      misc: pick(primary.expenses?.misc, fallback.expenses?.misc) ?? "",
+    },
+    assets: {
+      mutualFunds:
+        pick(primary.assets?.mutualFunds, fallback.assets?.mutualFunds) ?? "",
+      ppf: pick(primary.assets?.ppf, fallback.assets?.ppf) ?? "",
+      stocks: pick(primary.assets?.stocks, fallback.assets?.stocks) ?? "",
+      fd: pick(primary.assets?.fd, fallback.assets?.fd) ?? "",
+      cash: pick(primary.assets?.cash, fallback.assets?.cash) ?? "",
+    },
+    liabilities: {
+      homeLoan:
+        pick(primary.liabilities?.homeLoan, fallback.liabilities?.homeLoan) ?? "",
+      emi: pick(primary.liabilities?.emi, fallback.liabilities?.emi) ?? "",
+      creditCardDues:
+        pick(primary.liabilities?.creditCardDues, fallback.liabilities?.creditCardDues) ?? "",
+    },
+    insurance: {
+      healthInsurance:
+        pick(primary.insurance?.healthInsurance, fallback.insurance?.healthInsurance) ?? "",
+      lifeInsurance:
+        pick(primary.insurance?.lifeInsurance, fallback.insurance?.lifeInsurance) ?? "",
+    },
+    goals,
+    riskProfile: pick(primary.riskProfile, fallback.riskProfile) ?? "",
+    completed: Boolean(primary.completed || fallback.completed),
+  };
+}
+
 function getFirstIncompleteProfileSection(data) {
   if (
-    !data.personalInfo.age ||
-    !data.personalInfo.city ||
-    !data.personalInfo.maritalStatus ||
-    data.personalInfo.dependents === ""
+    !isProvided(data.personalInfo.age) ||
+    !isProvided(data.personalInfo.city) ||
+    !isProvided(data.personalInfo.maritalStatus) ||
+    !isProvided(data.personalInfo.dependents)
   )
     return 0;
   if (
-    !data.income.baseSalary ||
-    !data.income.hra ||
-    !data.income.otherAllowances ||
-    !data.income.otherIncome
+    !isProvided(data.income.baseSalary) ||
+    !isProvided(data.income.hra) ||
+    !isProvided(data.income.otherAllowances) ||
+    !isProvided(data.income.otherIncome)
   )
     return 1;
   if (
-    !data.expenses.rent ||
-    !data.expenses.food ||
-    !data.expenses.travel ||
-    !data.expenses.subscriptions ||
-    !data.expenses.misc
+    !isProvided(data.expenses.rent) ||
+    !isProvided(data.expenses.food) ||
+    !isProvided(data.expenses.travel) ||
+    !isProvided(data.expenses.subscriptions) ||
+    !isProvided(data.expenses.misc)
   )
     return 2;
   if (
-    !data.assets.mutualFunds ||
-    !data.assets.ppf ||
-    !data.assets.stocks ||
-    !data.assets.fd ||
-    !data.assets.cash
+    !isProvided(data.assets.mutualFunds) ||
+    !isProvided(data.assets.ppf) ||
+    !isProvided(data.assets.stocks) ||
+    !isProvided(data.assets.fd) ||
+    !isProvided(data.assets.cash)
   )
     return 3;
   if (
-    !data.liabilities.homeLoan ||
-    !data.liabilities.emi ||
-    !data.liabilities.creditCardDues
+    !isProvided(data.liabilities.homeLoan) ||
+    !isProvided(data.liabilities.emi) ||
+    !isProvided(data.liabilities.creditCardDues)
   )
     return 4;
-  if (!data.insurance.healthInsurance || !data.insurance.lifeInsurance)
+  if (!isProvided(data.insurance.healthInsurance) || !isProvided(data.insurance.lifeInsurance))
     return 5;
-  if (data.goals.some((goal) => !goal.targetAmount || !goal.years)) return 6;
-  if (!data.riskProfile) return 7;
+  if (data.goals.some((goal) => !isProvided(goal.targetAmount) || !isProvided(goal.years))) return 6;
+  if (!isProvided(data.riskProfile)) return 7;
   return 7;
 }
 
@@ -367,6 +479,7 @@ function OnboardingPage({ user, onComplete }) {
   const [currentSection, setCurrentSection] = useState(0);
   const [data, setData] = useState(initialOnboarding);
   const [skipWarning, setSkipWarning] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const sections = [
     "Personal Info",
@@ -383,21 +496,43 @@ function OnboardingPage({ user, onComplete }) {
     const loadSavedInputs = async () => {
       try {
         const existing = await loadFinancialInputs(userId);
+        const cached = readCachedOnboarding(userId);
         if (existing) {
-          setData(existing);
+          const merged = mergeOnboardingData(existing, cached);
+          setData(merged);
+          writeCachedOnboarding(userId, merged);
+          return;
+        }
+        if (cached) {
+          setData(cached);
         }
       } catch {
-        // Keep empty onboarding state if Supabase read fails.
+        const cached = readCachedOnboarding(userId);
+        if (cached) {
+          setData(cached);
+        }
       }
     };
     loadSavedInputs();
   }, [userId]);
 
+  useEffect(() => {
+    if (!userId) return;
+    writeCachedOnboarding(userId, data);
+  }, [userId, data]);
+
   const handleNext = async () => {
+    setSaveError("");
     try {
       await upsertFinancialInputs(userId, data);
-    } catch {
-      // Keep UX uninterrupted when Supabase write fails mid-onboarding.
+      writeCachedOnboarding(userId, data);
+    } catch (error) {
+      setSaveError(
+        error?.message ||
+          "Could not save onboarding data to database. Please try again.",
+      );
+      writeCachedOnboarding(userId, data);
+      return;
     }
 
     if (currentSection < sections.length - 1) {
@@ -417,10 +552,17 @@ function OnboardingPage({ user, onComplete }) {
       ...data,
       completed: true,
     };
+    setSaveError("");
     try {
       await upsertFinancialInputs(userId, completedPayload);
-    } catch {
-      // Let users proceed even if network write fails.
+      writeCachedOnboarding(userId, completedPayload);
+    } catch (error) {
+      setSaveError(
+        error?.message ||
+          "Could not save onboarding data to database. Please try again.",
+      );
+      writeCachedOnboarding(userId, completedPayload);
+      return;
     }
 
     onComplete();
@@ -440,12 +582,18 @@ function OnboardingPage({ user, onComplete }) {
     }
     current[keys[keys.length - 1]] = value;
     setData(newData);
+    if (userId) {
+      writeCachedOnboarding(userId, newData);
+    }
   };
 
   const updateArrayField = (arrayName, index, field, value) => {
     const newData = JSON.parse(JSON.stringify(data));
     newData[arrayName][index][field] = value;
     setData(newData);
+    if (userId) {
+      writeCachedOnboarding(userId, newData);
+    }
   };
 
   return (
@@ -490,6 +638,8 @@ function OnboardingPage({ user, onComplete }) {
               </div>
             </div>
           )}
+
+          {saveError && <div className="warning-box">{saveError}</div>}
 
           {!skipWarning && (
             <>
@@ -890,10 +1040,17 @@ function OnboardingPage({ user, onComplete }) {
                   <button
                     className="btn-fill-later"
                     onClick={async () => {
+                      setSaveError("");
                       try {
                         await upsertFinancialInputs(userId, data);
-                      } catch {
-                        // Continue with in-memory state if Supabase write fails.
+                        writeCachedOnboarding(userId, data);
+                      } catch (error) {
+                        setSaveError(
+                          error?.message ||
+                            "Could not save onboarding data to database. Please try again.",
+                        );
+                        writeCachedOnboarding(userId, data);
+                        return;
                       }
                       navigate("/");
                     }}
@@ -1144,16 +1301,31 @@ function DashboardApp({ user, onLogout }) {
     const loadSupabaseProfile = async () => {
       try {
         const existing = await loadFinancialInputs(userId);
+        const cached = readCachedOnboarding(userId);
         if (existing) {
-          setProfileData(existing);
+          const merged = mergeOnboardingData(existing, cached);
+          setProfileData(merged);
+          writeCachedOnboarding(userId, merged);
+          return;
+        }
+        if (cached) {
+          setProfileData(cached);
         }
       } catch {
-        // Keep default state if Supabase read fails.
+        const cached = readCachedOnboarding(userId);
+        if (cached) {
+          setProfileData(cached);
+        }
       }
     };
 
     loadSupabaseProfile();
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    writeCachedOnboarding(userId, profileData);
+  }, [userId, profileData]);
 
   useEffect(() => {
     if (showProfileModal) {
@@ -1179,55 +1351,6 @@ function DashboardApp({ user, onLogout }) {
       };
     });
   }, [profileData]);
-
-  useEffect(() => {
-    if (activeScreen !== "insights") {
-      return;
-    }
-
-    const loadInsights = async () => {
-      setInsightsLoading(true);
-      try {
-        const salary =
-          toNumber(profileData.income.baseSalary) +
-          toNumber(profileData.income.otherIncome) * 12;
-        const deductions = {
-          "80C": Math.max(0, toNumber(profileData.assets.ppf)),
-          "80D": Math.max(0, toNumber(profileData.insurance.healthInsurance)),
-        };
-
-        const [tax, fire, lifeEvent, couple] = await Promise.all([
-          agentService.getTaxAnalysis(userId, salary || null, deductions),
-          agentService.getFirePlan(
-            userId,
-            toNumber(profileData.goals?.[0]?.years)
-              ? toNumber(profileData.personalInfo.age) +
-                  toNumber(profileData.goals[0].years)
-              : null,
-          ),
-          agentService.getLifeEventPlan(
-            userId,
-            "Annual financial planning review",
-            false,
-          ),
-          agentService.getCouplePlan(userId, false),
-        ]);
-
-        setAgentInsights({ tax, fire, lifeEvent, couple });
-      } catch {
-        setAgentInsights({
-          tax: null,
-          fire: null,
-          lifeEvent: null,
-          couple: null,
-        });
-      } finally {
-        setInsightsLoading(false);
-      }
-    };
-
-    loadInsights();
-  }, [activeScreen, profileData, userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -1263,55 +1386,54 @@ function DashboardApp({ user, onLogout }) {
 
     // Personal Info
     totalFields += 4;
-    if (profileData.personalInfo.age) filledFields++;
-    if (profileData.personalInfo.city) filledFields++;
-    if (profileData.personalInfo.maritalStatus) filledFields++;
-    if (profileData.personalInfo.dependents) filledFields++;
+    if (isProvided(profileData.personalInfo.age)) filledFields++;
+    if (isProvided(profileData.personalInfo.city)) filledFields++;
+    if (isProvided(profileData.personalInfo.maritalStatus)) filledFields++;
+    if (isProvided(profileData.personalInfo.dependents)) filledFields++;
 
     // Income
-    totalFields += 5;
-    if (profileData.income.baseSalary) filledFields++;
-    if (profileData.income.hra) filledFields++;
-    if (profileData.income.otherAllowances) filledFields++;
-    if (profileData.income.bonus) filledFields++;
-    if (profileData.income.otherIncome) filledFields++;
+    totalFields += 4;
+    if (isProvided(profileData.income.baseSalary)) filledFields++;
+    if (isProvided(profileData.income.hra)) filledFields++;
+    if (isProvided(profileData.income.otherAllowances)) filledFields++;
+    if (isProvided(profileData.income.otherIncome)) filledFields++;
 
     // Expenses
     totalFields += 5;
-    if (profileData.expenses.rent) filledFields++;
-    if (profileData.expenses.food) filledFields++;
-    if (profileData.expenses.travel) filledFields++;
-    if (profileData.expenses.subscriptions) filledFields++;
-    if (profileData.expenses.misc) filledFields++;
+    if (isProvided(profileData.expenses.rent)) filledFields++;
+    if (isProvided(profileData.expenses.food)) filledFields++;
+    if (isProvided(profileData.expenses.travel)) filledFields++;
+    if (isProvided(profileData.expenses.subscriptions)) filledFields++;
+    if (isProvided(profileData.expenses.misc)) filledFields++;
 
     // Assets
     totalFields += 5;
-    if (profileData.assets.mutualFunds) filledFields++;
-    if (profileData.assets.ppf) filledFields++;
-    if (profileData.assets.stocks) filledFields++;
-    if (profileData.assets.fd) filledFields++;
-    if (profileData.assets.cash) filledFields++;
+    if (isProvided(profileData.assets.mutualFunds)) filledFields++;
+    if (isProvided(profileData.assets.ppf)) filledFields++;
+    if (isProvided(profileData.assets.stocks)) filledFields++;
+    if (isProvided(profileData.assets.fd)) filledFields++;
+    if (isProvided(profileData.assets.cash)) filledFields++;
 
     // Liabilities
     totalFields += 3;
-    if (profileData.liabilities.homeLoan) filledFields++;
-    if (profileData.liabilities.emi) filledFields++;
-    if (profileData.liabilities.creditCardDues) filledFields++;
+    if (isProvided(profileData.liabilities.homeLoan)) filledFields++;
+    if (isProvided(profileData.liabilities.emi)) filledFields++;
+    if (isProvided(profileData.liabilities.creditCardDues)) filledFields++;
 
     // Insurance
     totalFields += 2;
-    if (profileData.insurance.healthInsurance) filledFields++;
-    if (profileData.insurance.lifeInsurance) filledFields++;
+    if (isProvided(profileData.insurance.healthInsurance)) filledFields++;
+    if (isProvided(profileData.insurance.lifeInsurance)) filledFields++;
 
     // Goals
     totalFields += 3;
     profileData.goals.forEach((goal) => {
-      if (goal.targetAmount) filledFields++;
+      if (isProvided(goal.targetAmount) && isProvided(goal.years)) filledFields++;
     });
 
     // Risk Profile
     totalFields += 1;
-    if (profileData.riskProfile) filledFields++;
+    if (isProvided(profileData.riskProfile)) filledFields++;
 
     return Math.round((filledFields / totalFields) * 100);
   }, [profileData]);
@@ -1369,7 +1491,6 @@ function DashboardApp({ user, onLogout }) {
       insurance: 0,
       debt: 0,
       investment: 0,
-      tax: 0,
       retirement: 0,
     };
 
@@ -1410,21 +1531,14 @@ function DashboardApp({ user, onLogout }) {
         0,
         Math.min(100, (finance.assets.investments / 500000) * 100),
       ),
-      tax: 0,
       retirement: Math.max(0, Math.min(100, (finance.retirement / 500000) * 100)),
     };
 
-    const declaredTaxSavings =
-      toNumber(profileData.assets.ppf) +
-      toNumber(profileData.insurance.healthInsurance);
-    scores.tax = Math.max(0, Math.min(100, (declaredTaxSavings / 150000) * 100));
-
     const weightedScore =
-      scores.emergencyFund * 0.2 +
-      scores.insurance * 0.15 +
-      scores.debt * 0.15 +
+      scores.emergencyFund * 0.25 +
+      scores.insurance * 0.2 +
+      scores.debt * 0.2 +
       scores.investment * 0.2 +
-      scores.tax * 0.15 +
       scores.retirement * 0.15;
 
     return {
@@ -1432,7 +1546,7 @@ function DashboardApp({ user, onLogout }) {
       total: Math.round(weightedScore),
       breakdown: scores,
     };
-  }, [finance, hasMoneyHealthInputs, profileData]);
+  }, [finance, hasMoneyHealthInputs]);
 
   // Monthly Cash Flow
   const cashFlow = useMemo(() => {
@@ -1456,19 +1570,6 @@ function DashboardApp({ user, onLogout }) {
         action: "Review expenses",
         prompt:
           "I am overspending against my monthly budget. Analyze my situation and give me a concrete expense reduction plan for the next 30 days with priorities and cut suggestions.",
-      });
-    }
-
-    // Tax saving opportunity
-    if (profileData.income.baseSalary > 0 && finance.taxSavings === 0) {
-      alertList.push({
-        id: "tax-saving",
-        type: "info",
-        message:
-          "Tax saving opportunity detected! Invest in PPF or ELSS for 80C deduction.",
-        action: "Learn more",
-        prompt:
-          "Help me optimize tax savings based on my profile. Explain what I should do under 80C and 80D first, how much to allocate, and what order I should follow this year.",
       });
     }
 
@@ -1594,32 +1695,71 @@ function DashboardApp({ user, onLogout }) {
       currentAge > 0 && retirementYears > 0 ? currentAge + retirementYears : 0;
 
     return {
+      personal_info: {
+        age: currentAge,
+        city: profileData.personalInfo.city || "",
+        marital_status: profileData.personalInfo.maritalStatus || "",
+        dependents: toNumber(profileData.personalInfo.dependents),
+      },
       income: {
         salary: annualSalary,
         bonus: toNumber(profileData.income.bonus),
+        base_salary: toNumber(profileData.income.baseSalary),
+        hra: toNumber(profileData.income.hra),
+        other_allowances: toNumber(profileData.income.otherAllowances),
+        other_income: toNumber(profileData.income.otherIncome),
       },
       expenses: {
         total: monthlyExpenses,
+        rent: toNumber(profileData.expenses.rent),
+        food: toNumber(profileData.expenses.food),
+        travel: toNumber(profileData.expenses.travel),
+        subscriptions: toNumber(profileData.expenses.subscriptions),
+        misc: toNumber(profileData.expenses.misc),
+      },
+      assets: {
+        mutual_funds: toNumber(profileData.assets.mutualFunds),
+        ppf: toNumber(profileData.assets.ppf),
+        stocks: toNumber(profileData.assets.stocks),
+        fd: toNumber(profileData.assets.fd),
+        cash: toNumber(profileData.assets.cash),
+      },
+      liabilities: {
+        home_loan: toNumber(profileData.liabilities.homeLoan),
+        emi: toNumber(profileData.liabilities.emi),
+        credit_card_dues: toNumber(profileData.liabilities.creditCardDues),
+      },
+      insurance: {
+        health_insurance: toNumber(profileData.insurance.healthInsurance),
+        life_insurance: toNumber(profileData.insurance.lifeInsurance),
       },
       goals: {
         current_age: currentAge,
         retirement_age: retirementAge,
+        list: (profileData.goals || []).map((goal) => ({
+          type: goal.type || "",
+          target_amount: toNumber(goal.targetAmount),
+          years: toNumber(goal.years),
+        })),
       },
       investments: {
         current_corpus: Math.max(0, toNumber(finance.assets.savings) + toNumber(finance.assets.investments)),
         monthly_investment: 0,
       },
-      tax: {
-        deductions: {
-          "80C": Math.max(0, toNumber(profileData.assets.ppf)),
-          "80D": Math.max(0, toNumber(profileData.insurance.healthInsurance)),
-        },
+      profile: {
+        completion_percent: profileCompletion,
+        risk_profile: profileData.riskProfile || "",
       },
       partner: {
         salary: 0,
       },
     };
-  }, [profileData, finance.assets.savings, finance.assets.investments]);
+  }, [
+    profileData,
+    finance.assets.savings,
+    finance.assets.investments,
+    profileCompletion,
+  ]);
 
   const sendChatQuery = async (query) => {
     setChatError("");
@@ -1778,16 +1918,21 @@ function DashboardApp({ user, onLogout }) {
     }
     current[keys[keys.length - 1]] = value;
     setProfileData(next);
+    if (userId) {
+      writeCachedOnboarding(userId, next);
+    }
   };
 
   const updateProfileGoal = (index, field, value) => {
     const next = JSON.parse(JSON.stringify(profileData));
     next.goals[index][field] = value;
     setProfileData(next);
+    if (userId) {
+      writeCachedOnboarding(userId, next);
+    }
   };
 
   const quickPrompts = [
-    "Help me optimize tax for this year",
     "Generate a FIRE strategy from my current profile",
     "What should I prioritize this month: debt, emergency fund, or investing?",
   ];
@@ -1917,15 +2062,6 @@ function DashboardApp({ user, onLogout }) {
           <Link to="/fire-planner" className="nav-btn">
             FIRE Planner
           </Link>
-          <Link to="/tax-planner" className="nav-btn">
-            Tax Wizard
-          </Link>
-          <Link to="/portfolio-analyzer" className="nav-btn">
-            Portfolio X-Ray
-          </Link>
-          <Link to="/life-event" className="nav-btn">
-            Life Event Advisor
-          </Link>
           <Link to="/couple-planner" className="nav-btn">
             Couple Planner
           </Link>
@@ -1941,49 +2077,6 @@ function DashboardApp({ user, onLogout }) {
         <section className="content-column">
           <div className={`notification ${notification.type}`}>
             {notification.text}
-          </div>
-
-          <div className="quick-actions">
-            <div className="card quick-action-card">
-              <div>
-                <p className="card-label">Save My Taxes</p>
-                <h3>💰 Tax Wizard</h3>
-                <p>Compare regimes and find missed deductions.</p>
-              </div>
-              <Link to="/tax-planner" className="tax-cta-button">
-                Open Tax Planner →
-              </Link>
-            </div>
-            <div className="card quick-action-card">
-              <div>
-                <p className="card-label">Analyze My Portfolio</p>
-                <h3>📈 Portfolio X-Ray</h3>
-                <p>Check XIRR, overlap, and expense drag fast.</p>
-              </div>
-              <Link to="/portfolio-analyzer" className="tax-cta-button">
-                Open Analyzer →
-              </Link>
-            </div>
-            <div className="card quick-action-card">
-              <div>
-                <p className="card-label">Life Event Advisor</p>
-                <h3>👶 Life Event Advisor</h3>
-                <p>Get personalized next steps for big moments.</p>
-              </div>
-              <Link to="/life-event" className="tax-cta-button">
-                Open Advisor →
-              </Link>
-            </div>
-            <div className="card quick-action-card">
-              <div>
-                <p className="card-label">Plan as a Couple</p>
-                <h3>❤️ Couple Planner</h3>
-                <p>Combine income, goals, and strategies together.</p>
-              </div>
-              <Link to="/couple-planner" className="tax-cta-button">
-                Open Planner →
-              </Link>
-            </div>
           </div>
 
           {activeScreen === "dashboard" && (
@@ -2070,23 +2163,23 @@ function DashboardApp({ user, onLogout }) {
               )}
 
               <div className="grid two-up">
-                <article className="card highlight-card tax-cta-card">
-                  <p className="card-label">Save My Taxes</p>
-                  <h3>💰 Tax Wizard</h3>
+                <article className="card highlight-card feature-cta-card">
+                  <p className="card-label">Retirement Planning</p>
+                  <h3>🔥 FIRE Planner</h3>
                   <p>
-                    Compare old vs new regime and uncover deductions you might
-                    be missing.
+                    Calculate your target corpus and required monthly SIP for
+                    early retirement goals.
                   </p>
-                  <Link to="/tax-planner" className="tax-cta-button">
-                    Open Tax Planner →
+                  <Link to="/fire-planner" className="feature-cta-button">
+                    Open FIRE Planner →
                   </Link>
                 </article>
                 <article className="card">
                   <p className="card-label">Quick Insight</p>
-                  <h3>Tax readiness score</h3>
+                  <h3>Money health score</h3>
                   <p>
-                    Use the wizard to see potential savings and optimize your
-                    deductions faster.
+                    Track emergency fund, debt, investing, retirement, and
+                    insurance at a glance.
                   </p>
                 </article>
               </div>
@@ -2203,18 +2296,6 @@ function DashboardApp({ user, onLogout }) {
                           ></div>
                           <span className="health-value">
                             {Math.round(moneyHealthScore.breakdown.investment)}%
-                          </span>
-                        </div>
-                        <div className="health-item">
-                          <span className="health-label">Tax Planning</span>
-                          <div
-                            className="mini-bar"
-                            style={{
-                              width: `${Math.min(100, moneyHealthScore.breakdown.tax)}%`,
-                            }}
-                          ></div>
-                          <span className="health-value">
-                            {Math.round(moneyHealthScore.breakdown.tax)}%
                           </span>
                         </div>
                         <div className="health-item">
@@ -2704,7 +2785,7 @@ function DashboardApp({ user, onLogout }) {
                         <br />
                         <small>
                           Weighted indicator across emergency fund, insurance,
-                          debt, investments, tax planning, and retirement.
+                          debt, investments, and retirement.
                         </small>
                       </div>
                       <div className="txn-item">
@@ -2733,7 +2814,7 @@ function DashboardApp({ user, onLogout }) {
                     <h3>Act On Smart Alerts</h3>
                     <p>
                       Smart Alerts are trigger-based signals for overspending,
-                      tax opportunities, emergency fund gaps, and debt burden.
+                      emergency fund gaps, and debt burden.
                     </p>
                     <div className="stack">
                       <div className="txn-item">
@@ -2774,34 +2855,10 @@ function DashboardApp({ user, onLogout }) {
                     <h3>When To Use Which Tool</h3>
                     <div className="stack">
                       <div className="txn-item">
-                        <strong>Tax Wizard</strong>
-                        <br />
-                        <small>
-                          Use before year-end to compare regimes and close
-                          deduction gaps.
-                        </small>
-                      </div>
-                      <div className="txn-item">
                         <strong>FIRE Planner</strong>
                         <br />
                         <small>
                           Use for long-term retirement corpus and SIP planning.
-                        </small>
-                      </div>
-                      <div className="txn-item">
-                        <strong>Portfolio X-Ray</strong>
-                        <br />
-                        <small>
-                          Use to inspect portfolio quality, overlap, and return
-                          efficiency.
-                        </small>
-                      </div>
-                      <div className="txn-item">
-                        <strong>Life Event Advisor</strong>
-                        <br />
-                        <small>
-                          Use during marriage, relocation, bonus, new child, or
-                          any major expense phase.
                         </small>
                       </div>
                       <div className="txn-item">
@@ -3323,8 +3380,10 @@ function DashboardApp({ user, onLogout }) {
                 onClick={async () => {
                   try {
                     await upsertFinancialInputs(userId, profileData);
+                    writeCachedOnboarding(userId, profileData);
                   } catch {
                     // Keep modal UX non-blocking if Supabase write fails.
+                    writeCachedOnboarding(userId, profileData);
                   }
                   setShowProfileModal(false);
                 }}
@@ -3336,8 +3395,10 @@ function DashboardApp({ user, onLogout }) {
                 onClick={async () => {
                   try {
                     await upsertFinancialInputs(userId, profileData);
+                    writeCachedOnboarding(userId, profileData);
                   } catch {
                     // Keep local state updated even if Supabase write fails.
+                    writeCachedOnboarding(userId, profileData);
                   }
                   if (currentProfileSection < profileSections.length - 1) {
                     setCurrentProfileSection(currentProfileSection + 1);
@@ -3418,30 +3479,6 @@ export default function App() {
         element={
           <ProtectedRoute sessionUser={sessionUser}>
             <FirePlanner />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/tax-planner"
-        element={
-          <ProtectedRoute sessionUser={sessionUser}>
-            <TaxPlanner />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/portfolio-analyzer"
-        element={
-          <ProtectedRoute sessionUser={sessionUser}>
-            <PortfolioAnalyzer />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/life-event"
-        element={
-          <ProtectedRoute sessionUser={sessionUser}>
-            <LifeEventPlanner />
           </ProtectedRoute>
         }
       />

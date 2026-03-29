@@ -1,7 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.services.couple_service import generate_couple_plan
+from backend.services.couple_service import generate_couple_plan, import_partner_profile
 
 router = APIRouter()
 
@@ -17,6 +17,10 @@ class CoupleRequest(BaseModel):
     shared_goals: str | None = None
     risk_preference: str | None = None
     use_ai: bool = False
+
+
+class ImportPartnerRequest(BaseModel):
+    email: str
 
 
 @router.post("/feature/couple")
@@ -35,3 +39,15 @@ def couple_planner(req: CoupleRequest):
         },
         use_ai=req.use_ai,
     )
+
+
+@router.post("/feature/couple/import-profile")
+def couple_import_profile(req: ImportPartnerRequest):
+    email = (req.email or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Partner email is required.")
+
+    try:
+        return import_partner_profile(email)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

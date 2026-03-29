@@ -58,24 +58,6 @@ async function getFirePlan(userId = null, retirementAge) {
   });
 }
 
-async function getTaxAnalysis(userId = null, salary, deductions) {
-  const resolvedUserId = await resolveUserId(userId);
-  return request("/feature/tax", {
-    user_id: resolvedUserId,
-    salary: salary ?? null,
-    deductions: deductions ?? null,
-  });
-}
-
-async function getLifeEventPlan(userId = null, event, useAI = false) {
-  const resolvedUserId = await resolveUserId(userId);
-  return request("/feature/life-event", {
-    user_id: resolvedUserId,
-    event,
-    use_ai: useAI,
-  });
-}
-
 async function getCouplePlan(userId = null, useAI = false) {
   const resolvedUserId = await resolveUserId(userId);
   return request("/feature/couple", {
@@ -87,7 +69,5 @@ async function getCouplePlan(userId = null, useAI = false) {
 export default {
   askAI,
   getFirePlan,
-  getTaxAnalysis,
-  getLifeEventPlan,
   getCouplePlan,
 };
