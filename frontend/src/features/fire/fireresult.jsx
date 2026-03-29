@@ -20,6 +20,8 @@ export default function FireResult({ result }) {
   }
 
   const allocationEntries = Object.entries(plan.asset_allocation || {});
+  const warnings = Array.isArray(plan.warnings) ? plan.warnings : [];
+  const assumptions = plan.assumptions || {};
   const summaryCards = [
     {
       label: "Retirement Corpus",
@@ -30,6 +32,11 @@ export default function FireResult({ result }) {
       label: "Monthly SIP",
       value: formatINR(plan.monthly_sip),
       icon: "📈",
+    },
+    {
+      label: "Additional SIP Needed",
+      value: formatINR(plan.additional_sip_needed),
+      icon: "➕",
     },
     {
       label: "Years to Retirement",
@@ -99,6 +106,78 @@ export default function FireResult({ result }) {
           ))}
         </div>
       </div>
+
+      <div className="fire-allocation">
+        <div className="fire-allocation-header">
+          <div>
+            <p className="fire-eyebrow">Cashflow Fit</p>
+            <h3>Affordability check</h3>
+          </div>
+        </div>
+        <div className="fire-allocation-grid">
+          <div className="fire-allocation-card">
+            <div>
+              <p className="fire-allocation-title">Monthly Surplus</p>
+              <p className="fire-allocation-value">{formatINR(plan.monthly_surplus)}</p>
+            </div>
+          </div>
+          <div className="fire-allocation-card">
+            <div>
+              <p className="fire-allocation-title">Savings Rate</p>
+              <p className="fire-allocation-value">{formatPercent(plan.savings_rate)}</p>
+            </div>
+          </div>
+          <div className="fire-allocation-card">
+            <div>
+              <p className="fire-allocation-title">Projected Existing Corpus</p>
+              <p className="fire-allocation-value">
+                {formatINR(plan.projected_current_corpus + plan.projected_existing_contributions)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="fire-allocation">
+        <div className="fire-allocation-header">
+          <div>
+            <p className="fire-eyebrow">Assumptions Used</p>
+            <h3>Model parameters</h3>
+          </div>
+        </div>
+        <div className="fire-allocation-grid">
+          <div className="fire-allocation-card">
+            <p className="fire-allocation-title">Inflation</p>
+            <p className="fire-allocation-value">{formatPercent(assumptions.inflation_rate)}</p>
+          </div>
+          <div className="fire-allocation-card">
+            <p className="fire-allocation-title">Expected Return</p>
+            <p className="fire-allocation-value">{formatPercent(assumptions.annual_return)}</p>
+          </div>
+          <div className="fire-allocation-card">
+            <p className="fire-allocation-title">SWR</p>
+            <p className="fire-allocation-value">{formatPercent(assumptions.safe_withdrawal_rate)}</p>
+          </div>
+        </div>
+      </div>
+
+      {warnings.length > 0 && (
+        <div className="fire-allocation">
+          <div className="fire-allocation-header">
+            <div>
+              <p className="fire-eyebrow">Watchouts</p>
+              <h3>Before you act</h3>
+            </div>
+          </div>
+          <div className="fire-allocation-grid">
+            {warnings.map((item) => (
+              <div key={item} className="fire-allocation-card">
+                <p className="fire-allocation-title">⚠ {item}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

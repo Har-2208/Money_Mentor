@@ -44,6 +44,10 @@ def _to_int(value: Any, default: int) -> int:
         return default
 
 
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
 def _clean_lines(text: str) -> List[str]:
     lines: List[str] = []
     for raw in (text or "").splitlines():
@@ -148,6 +152,16 @@ def _apply_fire_inputs(user_data: Dict[str, Any], profile_overrides: Dict[str, A
         updated.setdefault("goals", {})["retirement_age"] = _to_int(profile_overrides.get("retirement_age"), 55)
     if profile_overrides.get("current_investments") is not None:
         updated.setdefault("investments", {})["current_corpus"] = _to_float(profile_overrides.get("current_investments"))
+    if profile_overrides.get("monthly_investment") is not None:
+        updated.setdefault("investments", {})["monthly_investment"] = _to_float(profile_overrides.get("monthly_investment"))
+    if profile_overrides.get("inflation_rate") is not None:
+        updated.setdefault("assumptions", {})["inflation_rate"] = _to_float(profile_overrides.get("inflation_rate"))
+    if profile_overrides.get("annual_return") is not None:
+        updated.setdefault("assumptions", {})["annual_return"] = _to_float(profile_overrides.get("annual_return"))
+    if profile_overrides.get("safe_withdrawal_rate") is not None:
+        updated.setdefault("assumptions", {})["safe_withdrawal_rate"] = _to_float(
+            profile_overrides.get("safe_withdrawal_rate")
+        )
 
     risk_level = str(profile_overrides.get("risk_level") or "").lower().strip()
     if risk_level:
@@ -165,11 +179,27 @@ def _apply_fire_inputs(user_data: Dict[str, Any], profile_overrides: Dict[str, A
 
 
 def _build_fire_plan(user_data: Dict[str, Any], behavior: Dict[str, Any], retirement_age: int | None = None) -> Dict[str, Any]:
-    inflation_rate = get_env_float("FIRE_INFLATION_RATE", 0.06)
-    annual_return = get_env_float("FIRE_ANNUAL_RETURN", 0.12)
-    swr = get_env_float("FIRE_SAFE_WITHDRAWAL_RATE", 0.04)
+    inflation_rate = _clamp(
+        _to_float(user_data.get("assumptions", {}).get("inflation_rate"), get_env_float("FIRE_INFLATION_RATE", 0.06)),
+        0.0,
+        0.2,
+    )
+    annual_return = _clamp(
+        _to_float(user_data.get("assumptions", {}).get("annual_return"), get_env_float("FIRE_ANNUAL_RETURN", 0.12)),
+        0.01,
+        0.3,
+    )
+    swr = _clamp(
+        _to_float(
+            user_data.get("assumptions", {}).get("safe_withdrawal_rate"),
+            get_env_float("FIRE_SAFE_WITHDRAWAL_RATE", 0.04),
+        ),
+        0.01,
+        0.08,
+    )
 
     monthly_expense = _to_float(user_data.get("expenses", {}).get("total"), 0.0)
+    monthly_income = _to_float(user_data.get("income", {}).get("salary"), 0.0) / 12
     current_age = _to_int(user_data.get("goals", {}).get("current_age"), 30)
     selected_retirement_age = retirement_age or _to_int(user_data.get("goals", {}).get("retirement_age"), 55)
 
@@ -178,11 +208,27 @@ def _build_fire_plan(user_data: Dict[str, Any], behavior: Dict[str, Any], retire
     target_corpus = adjusted_annual_expense / swr if swr > 0 else 0.0
 
     current_corpus = _to_float(user_data.get("investments", {}).get("current_corpus"), 0.0)
-    required_corpus = max(target_corpus - current_corpus, 0.0)
-    monthly_sip = calculate_sip(required_corpus, years_to_retire, annual_rate=annual_return) if required_corpus > 0 else 0.0
+    existing_monthly_investment = max(
+        0.0,
+        _to_float(user_data.get("investments", {}).get("monthly_investment"), 0.0),
+    )
+
+    projected_current_corpus = current_corpus * ((1 + annual_return) ** years_to_retire)
+    monthly_rate = annual_return / 12
+    months = years_to_retire * 12
+    sip_growth_factor = (
+        (((1 + monthly_rate) ** months) - 1) / monthly_rate * (1 + monthly_rate)
+        if monthly_rate > 0
+        else months
+    )
+    projected_existing_contributions = existing_monthly_investment * sip_growth_factor
+
+    required_future_gap = max(target_corpus - projected_current_corpus - projected_existing_contributions, 0.0)
+    additional_monthly_sip = calculate_sip(required_future_gap, years_to_retire, annual_rate=annual_return) if required_future_gap > 0 else 0.0
+    monthly_sip = existing_monthly_investment + additional_monthly_sip
 
     if behavior.get("adherence_score", 0.5) < 0.5:
-        monthly_sip = monthly_sip * 0.9
+        monthly_sip = monthly_sip * 0.95
 
     allocation = user_data.get("investments", {}).get(
         "current_allocation",
@@ -191,14 +237,40 @@ def _build_fire_plan(user_data: Dict[str, Any], behavior: Dict[str, Any], retire
 
     annual_income = _to_float(user_data.get("income", {}).get("salary"), 0.0)
     insurance_gap = max((monthly_expense * 12 * 20) - annual_income, 0.0)
+    monthly_surplus = max(monthly_income - monthly_expense, 0.0)
+    savings_rate = (monthly_surplus / monthly_income) if monthly_income > 0 else 0.0
+
+    warnings: List[str] = []
+    if monthly_expense <= 0:
+        warnings.append("Monthly expenses are zero or missing, so corpus estimate may be unrealistically low.")
+    if monthly_income > 0 and monthly_expense > monthly_income:
+        warnings.append("Monthly expenses exceed income; prioritize cash-flow correction before aggressive FIRE targets.")
+    if selected_retirement_age <= current_age:
+        warnings.append("Retirement age must be greater than current age. Assumed minimum 1-year horizon.")
+    if monthly_surplus > 0 and monthly_sip > monthly_surplus:
+        warnings.append("Recommended monthly investment exceeds current monthly surplus.")
 
     return {
         "fire_plan": {
             "monthly_sip": round(monthly_sip, 2),
+            "additional_sip_needed": round(additional_monthly_sip, 2),
+            "existing_monthly_investment": round(existing_monthly_investment, 2),
             "asset_allocation": allocation,
             "timeline": {"years_to_retire": years_to_retire, "retirement_age": selected_retirement_age},
             "insurance_gap": round(insurance_gap, 2),
             "target_corpus": round(target_corpus, 2),
+            "projected_current_corpus": round(projected_current_corpus, 2),
+            "projected_existing_contributions": round(projected_existing_contributions, 2),
+            "monthly_income": round(monthly_income, 2),
+            "monthly_expenses": round(monthly_expense, 2),
+            "monthly_surplus": round(monthly_surplus, 2),
+            "savings_rate": round(savings_rate, 4),
+            "assumptions": {
+                "inflation_rate": round(inflation_rate, 4),
+                "annual_return": round(annual_return, 4),
+                "safe_withdrawal_rate": round(swr, 4),
+            },
+            "warnings": warnings,
         }
     }
 

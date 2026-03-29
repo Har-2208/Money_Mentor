@@ -32,6 +32,7 @@ def root():
         "endpoints": [
             "/ask",
             "/feature/fire",
+            "/feature/fire/latest",
             "/feature/tax",
             "/feature/portfolio-xray",
             "/feature/life-event",
